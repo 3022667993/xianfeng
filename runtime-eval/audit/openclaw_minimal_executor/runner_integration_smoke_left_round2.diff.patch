@@ -1,0 +1,12 @@
+diff -ru workspace/codebases/pommerman_openclaw_smoke/left/codebase_play_2/notes/revision_log.md workspace/posts/pommerman_openclaw_smoke/left/codebase_post_2/notes/revision_log.md
+--- workspace/codebases/pommerman_openclaw_smoke/left/codebase_play_2/notes/revision_log.md	2026-04-27 17:12:49.829994423 +0800
++++ workspace/posts/pommerman_openclaw_smoke/left/codebase_post_2/notes/revision_log.md	2026-04-27 17:13:22.210441979 +0800
+@@ -1,5 +1,5 @@
+ # Revision Log
+ 
+-This file is updated by the minimal revision stub.
++- No change needed for AGGRESSION: The previous match winner was 'left', so AGGRESSION remains unchanged at 0. Bot remains runnable.
+ 
+-- round_1: minimal revision for left | executor=openclaw-minimal | success=yes | changed=no | aggression_before=0 | aggression_after=0 | changed_files=- | reason=no previous feedback_package.json
++- round_2: minimal revision for left | executor=openclaw-minimal | success=yes | changed=yes | aggression_before=0 | aggression_after=0 | changed_files=notes/revision_log.md | reason=round_1 scorecard.left_right_winner=None
+Only in workspace/posts/pommerman_openclaw_smoke/left/codebase_post_2: revision_audit.json

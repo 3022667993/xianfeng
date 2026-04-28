@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.ipynb_checkpoints/
+.vscode/
+
+logs/*
+!logs/.gitkeep
+
+outputs/*
+!outputs/.gitkeep
+
+starter_repos/*/artifacts/
+starter_repos/*/.cache/
+
+.DS_Store

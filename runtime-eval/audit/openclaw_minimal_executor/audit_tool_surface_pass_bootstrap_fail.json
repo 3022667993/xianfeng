@@ -1,0 +1,123 @@
+{
+  "executor": "openclaw-minimal",
+  "mode": "audit-first-one-shot",
+  "success": false,
+  "errors": [
+    "forbidden injected workspace files present"
+  ],
+  "startedAtUnix": 1777279530.411374,
+  "durationSeconds": 16.802,
+  "game": "pommerman_1v1",
+  "regime": "A00",
+  "side": "left",
+  "bootstrapPath": "/root/autodl-tmp/runtime-eval/runner/core/openclaw_minimal_bootstrap.txt",
+  "feedbackPath": "/root/autodl-tmp/runtime-eval/logs/round_1/feedback_package.json",
+  "codebasePostDir": "/root/autodl-tmp/runtime-eval/workspace/posts/pommerman_pilot/left/codebase_post_2",
+  "feedbackRound": 1,
+  "scorecard": {
+    "left_score": -1,
+    "right_score": 1,
+    "left_right_winner": "right"
+  },
+  "openclawDir": "/root/autodl-tmp/external/openclaw",
+  "openclawReturnCode": 0,
+  "openclawStdoutTail": "\n> openclaw@2026.4.24 openclaw /root/autodl-tmp/external/openclaw\n> node scripts/run-node.mjs agent --agent main --message 'You are OpenClaw-Minimal running inside a controlled runtime-eval audit.\n\nIMPORTANT:\nThis is an AUDIT-ONLY one-shot executor smoke.\nDo not edit files.\nDo not create files.\nDo not run commands.\nReturn a concise JSON object only.\n\nExperiment:\n- game: pommerman_1v1\n- regime: A00\n- side: left\n- codebase_post_dir: /root/autodl-tmp/runtime-eval/workspace/posts/pommerman_pilot/left/codebase_post_2\n- feedback_path: /root/autodl-tmp/runtime-eval/logs/round_1/feedback_package.json\n\nBootstrap contract:\nOpenClaw-Minimal Bootstrap\n\nMode:\n- fresh session only\n- no file memory\n- no session carryover\n- skills disabled\n- browser disabled\n- web disabled\n- automation disabled\n- subagents disabled\n- fixed minimal bootstrap\n\nAllowed inputs:\n- current codebase_post_t directory\n- previous round feedback_package.json\n- this bootstrap file\n\nAllowed edits:\n- only codebase_post_t/submission/main.py\n- append/update codebase_post_t/notes/revision_log.md\n\nTask:\n- read previous feedback_package.json scorecard.left_right_winner\n- for pommerman_1v1 A00 left side only:\n  if previous winner is right, toggle AGGRESSION between 0 and 1\n  otherwise leave AGGRESSION unchanged\n- keep codebase_post_t runnable\n- report success/failure and changed files\n\n\nTask:\nConfirm that you understand the revision task, but do not perform the revision in this audit-only run.\n\nReturn exactly JSON:\n{\"understood\": true, \"would_edit\": false}\n' --json --local --timeout 600\n\n",
+  "openclawStderrTail": ".md\",\n          \"path\": \"/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/TOOLS.md\",\n          \"missing\": false,\n          \"rawChars\": 196,\n          \"injectedChars\": 196,\n          \"truncated\": false\n        },\n        {\n          \"name\": \"IDENTITY.md\",\n          \"path\": \"/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/IDENTITY.md\",\n          \"missing\": false,\n          \"rawChars\": 89,\n          \"injectedChars\": 89,\n          \"truncated\": false\n        },\n        {\n          \"name\": \"USER.md\",\n          \"path\": \"/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/USER.md\",\n          \"missing\": false,\n          \"rawChars\": 101,\n          \"injectedChars\": 101,\n          \"truncated\": false\n        },\n        {\n          \"name\": \"BOOTSTRAP.md\",\n          \"path\": \"/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/BOOTSTRAP.md\",\n          \"missing\": true,\n          \"rawChars\": 0,\n          \"injectedChars\": 0,\n          \"truncated\": false\n        }\n      ],\n      \"skills\": {\n        \"promptChars\": 0,\n        \"entries\": []\n      },\n      \"tools\": {\n        \"listChars\": 0,\n        \"schemaChars\": 2459,\n        \"entries\": [\n          {\n            \"name\": \"read\",\n            \"summaryChars\": 298,\n            \"schemaChars\": 304,\n            \"propertiesCount\": 3\n          },\n          {\n            \"name\": \"edit\",\n            \"summaryChars\": 326,\n            \"schemaChars\": 834,\n            \"propertiesCount\": 2\n          },\n          {\n            \"name\": \"write\",\n            \"summaryChars\": 127,\n            \"schemaChars\": 225,\n            \"propertiesCount\": 2\n          },\n          {\n            \"name\": \"exec\",\n            \"summaryChars\": 446,\n            \"schemaChars\": 1096,\n            \"propertiesCount\": 12\n          }\n        ]\n      }\n    },\n    \"finalPromptText\": \"You are OpenClaw-Minimal running inside a controlled runtime-eval audit.\\n\\nIMPORTANT:\\nThis is an AUDIT-ONLY one-shot executor smoke.\\nDo not edit files.\\nDo not create files.\\nDo not run commands.\\nReturn a concise JSON object only.\\n\\nExperiment:\\n- game: pommerman_1v1\\n- regime: A00\\n- side: left\\n- codebase_post_dir: /root/autodl-tmp/runtime-eval/workspace/posts/pommerman_pilot/left/codebase_post_2\\n- feedback_path: /root/autodl-tmp/runtime-eval/logs/round_1/feedback_package.json\\n\\nBootstrap contract:\\nOpenClaw-Minimal Bootstrap\\n\\nMode:\\n- fresh session only\\n- no file memory\\n- no session carryover\\n- skills disabled\\n- browser disabled\\n- web disabled\\n- automation disabled\\n- subagents disabled\\n- fixed minimal bootstrap\\n\\nAllowed inputs:\\n- current codebase_post_t directory\\n- previous round feedback_package.json\\n- this bootstrap file\\n\\nAllowed edits:\\n- only codebase_post_t/submission/main.py\\n- append/update codebase_post_t/notes/revision_log.md\\n\\nTask:\\n- read previous feedback_package.json scorecard.left_right_winner\\n- for pommerman_1v1 A00 left side only:\\n  if previous winner is right, toggle AGGRESSION between 0 and 1\\n  otherwise leave AGGRESSION unchanged\\n- keep codebase_post_t runnable\\n- report success/failure and changed files\\n\\n\\nTask:\\nConfirm that you understand the revision task, but do not perform the revision in this audit-only run.\\n\\nReturn exactly JSON:\\n{\\\"understood\\\": true, \\\"would_edit\\\": false}\\n\",\n    \"finalAssistantVisibleText\": \"{\\\"understood\\\": true, \\\"would_edit\\\": false}\",\n    \"finalAssistantRawText\": \"{\\\"understood\\\": true, \\\"would_edit\\\": false}\",\n    \"replayInvalid\": false,\n    \"livenessState\": \"working\",\n    \"stopReason\": \"stop\",\n    \"executionTrace\": {\n      \"winnerProvider\": \"relay\",\n      \"winnerModel\": \"gpt-4.1\",\n      \"attempts\": [\n        {\n          \"provider\": \"relay\",\n          \"model\": \"gpt-4.1\",\n          \"result\": \"success\",\n          \"stage\": \"assistant\"\n        }\n      ],\n      \"fallbackUsed\": false,\n      \"runner\": \"embedded\"\n    },\n    \"requestShaping\": {\n      \"thinking\": \"off\"\n    },\n    \"completion\": {\n      \"stopReason\": \"stop\",\n      \"finishReason\": \"stop\"\n    }\n  }\n}\n",
+  "openclawAudit": {
+    "provider": "relay",
+    "model": "gpt-4.1",
+    "workspaceDir": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal",
+    "injectedWorkspaceFiles": [
+      {
+        "name": "AGENTS.md",
+        "path": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/AGENTS.md",
+        "missing": false,
+        "rawChars": 490,
+        "injectedChars": 490,
+        "truncated": false
+      },
+      {
+        "name": "SOUL.md",
+        "path": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/SOUL.md",
+        "missing": true,
+        "rawChars": 0,
+        "injectedChars": 88,
+        "truncated": false
+      },
+      {
+        "name": "TOOLS.md",
+        "path": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/TOOLS.md",
+        "missing": false,
+        "rawChars": 196,
+        "injectedChars": 196,
+        "truncated": false
+      },
+      {
+        "name": "IDENTITY.md",
+        "path": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/IDENTITY.md",
+        "missing": false,
+        "rawChars": 89,
+        "injectedChars": 89,
+        "truncated": false
+      },
+      {
+        "name": "USER.md",
+        "path": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/USER.md",
+        "missing": false,
+        "rawChars": 101,
+        "injectedChars": 101,
+        "truncated": false
+      },
+      {
+        "name": "BOOTSTRAP.md",
+        "path": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/BOOTSTRAP.md",
+        "missing": true,
+        "rawChars": 0,
+        "injectedChars": 0,
+        "truncated": false
+      }
+    ],
+    "forbiddenInjectedWorkspaceFiles": [
+      {
+        "name": "SOUL.md",
+        "path": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/SOUL.md",
+        "missing": true,
+        "rawChars": 0,
+        "injectedChars": 88,
+        "truncated": false
+      }
+    ],
+    "toolNames": [
+      "read",
+      "edit",
+      "write",
+      "exec"
+    ],
+    "forbiddenTools": [],
+    "skills": {
+      "promptChars": 0,
+      "entries": []
+    },
+    "realForbiddenWorkspaceFiles": [],
+    "finalAssistantVisibleText": "{\"understood\": true, \"would_edit\": false}",
+    "stopReason": "stop",
+    "executionTrace": {
+      "winnerProvider": "relay",
+      "winnerModel": "gpt-4.1",
+      "attempts": [
+        {
+          "provider": "relay",
+          "model": "gpt-4.1",
+          "result": "success",
+          "stage": "assistant"
+        }
+      ],
+      "fallbackUsed": false,
+      "runner": "embedded"
+    },
+    "rawSystemPromptReportPresent": true
+  },
+  "changedFilesObservedBeforeFailClosedRestore": [],
+  "changedFiles": [],
+  "note": "This executor intentionally fails closed until the OpenClaw tool surface matches OpenClaw-Minimal. It does not preserve model edits from audit-only runs."
+}

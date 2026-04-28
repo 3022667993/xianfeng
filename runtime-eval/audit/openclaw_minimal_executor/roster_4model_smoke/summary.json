@@ -1,0 +1,287 @@
+{
+  "status": "PASS",
+  "experiment": "pommerman_4model_roster_smoke",
+  "regime": "A00",
+  "executor": "openclaw-minimal",
+  "audit_count": 10,
+  "items": [
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gemini_3_flash_preview/codebase_post_3_vs_relay_gpt_4_1/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview",
+      "agentId": "relay_gemini_3_flash_preview",
+      "providerModel": "relay/gemini-3-flash-preview",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gemini_3_flash_preview/codebase_post_5_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview",
+      "agentId": "relay_gemini_3_flash_preview",
+      "providerModel": "relay/gemini-3-flash-preview",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [
+        "submission/main.py"
+      ],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gemini_3_flash_preview/codebase_post_6_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview",
+      "agentId": "relay_gemini_3_flash_preview",
+      "providerModel": "relay/gemini-3-flash-preview",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [
+        "submission/main.py"
+      ],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gemini_3_pro_preview/codebase_post_2_vs_relay_gpt_4_1/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gemini_3_pro_preview/codebase_post_4_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gemini_3_pro_preview/codebase_post_6_vs_relay_gemini_3_flash_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [
+        "submission/main.py"
+      ],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gpt_4_1/codebase_post_2_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_4_1",
+      "agentId": "relay_gpt_4_1",
+      "providerModel": "relay/gpt-4.1",
+      "provider": "relay",
+      "model": "gpt-4.1",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gpt_4_1/codebase_post_3_vs_relay_gemini_3_flash_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_4_1",
+      "agentId": "relay_gpt_4_1",
+      "providerModel": "relay/gpt-4.1",
+      "provider": "relay",
+      "model": "gpt-4.1",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gpt_5_4/codebase_post_4_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_4model_roster_smoke/relay_gpt_5_4/codebase_post_5_vs_relay_gemini_3_flash_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [
+        "submission/main.py"
+      ],
+      "disallowedChangedFiles": []
+    }
+  ]
+}

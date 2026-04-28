@@ -1,0 +1,14 @@
+name: A00
+description: memory-minimal
+conversational_carryover: false
+file_memory: false
+visibility: summary-only
+
+runtime_controls:
+  skills_enabled: false
+  memory_plugin_enabled: false
+  session_memory_hook: false
+  pre_compaction_memory_flush: false
+  startup_memory_prelude: false
+  fixed_bootstrap: true
+  fixed_tool_surface: true

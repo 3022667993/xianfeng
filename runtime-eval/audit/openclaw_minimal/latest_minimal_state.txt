@@ -1,0 +1,24 @@
+===== workspace files =====
+/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/AGENTS.md
+/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/IDENTITY.md
+/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/TOOLS.md
+/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/USER.md
+/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/wrappers/build.sh
+/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/wrappers/test.sh
+
+===== forbidden files check =====
+forbidden files absent
+
+===== config summary =====
+workspace = /root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal
+skipBootstrap = True
+contextInjection = always
+heartbeat.every = 0m
+heartbeat.includeSystemPromptSection = False
+skills = []
+skills.allowBundled = []
+memory.slot = none
+memoryFlush.enabled = False
+browser.enabled = False
+
+OPENCLAW_MINIMAL_AUDIT_OK

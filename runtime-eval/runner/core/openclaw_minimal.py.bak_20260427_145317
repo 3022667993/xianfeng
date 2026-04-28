@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+
+def _read_aggression(submission_main_path: Path) -> int:
+    marker = "AGGRESSION = "
+    for line in submission_main_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(marker):
+            value = line[len(marker):].strip()
+            if value in {"0", "1"}:
+                return int(value)
+    raise ValueError(f"missing editable AGGRESSION in {submission_main_path}")
+
+
+def _write_aggression(submission_main_path: Path, new_value: int) -> None:
+    marker = "AGGRESSION = "
+    lines = submission_main_path.read_text(encoding="utf-8").splitlines()
+    for idx, line in enumerate(lines):
+        if line.startswith(marker):
+            lines[idx] = f"{marker}{new_value}"
+            submission_main_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return
+    raise ValueError(f"missing editable AGGRESSION in {submission_main_path}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--bootstrap", required=True)
+    parser.add_argument("--codebase-post-dir", required=True)
+    parser.add_argument("--feedback-path", required=True)
+    parser.add_argument("--side", required=True)
+    parser.add_argument("--game", required=True)
+    parser.add_argument("--regime", required=True)
+    args = parser.parse_args()
+
+    bootstrap_path = Path(args.bootstrap)
+    codebase_post_dir = Path(args.codebase_post_dir)
+    feedback_path = Path(args.feedback_path)
+    submission_main_path = codebase_post_dir / "submission" / "main.py"
+
+    # Require the fixed bootstrap file to be present/readable so the caller can
+    # keep the OpenClaw-Minimal input surface explicit.
+    _ = bootstrap_path.read_text(encoding="utf-8")
+
+    feedback_data = json.loads(feedback_path.read_text(encoding="utf-8"))
+    previous_winner = feedback_data.get("scorecard", {}).get("left_right_winner")
+    if previous_winner not in {"left", "right", "draw"}:
+        raise ValueError("feedback_package.json missing scorecard.left_right_winner")
+
+    old_aggression = _read_aggression(submission_main_path)
+    new_aggression = old_aggression
+    if (
+        args.game == "pommerman_1v1"
+        and args.regime == "A00"
+        and args.side == "left"
+        and previous_winner == "right"
+    ):
+        new_aggression = 1 - old_aggression
+        _write_aggression(submission_main_path, new_aggression)
+
+    result = {
+        "executor": "openclaw-minimal",
+        "success": True,
+        "changed": new_aggression != old_aggression,
+        "aggression_before": old_aggression,
+        "aggression_after": new_aggression,
+        "previous_winner": previous_winner,
+        "changed_files": ["submission/main.py"] if new_aggression != old_aggression else [],
+    }
+    print(json.dumps(result, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

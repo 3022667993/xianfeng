@@ -1,0 +1,40 @@
+models:
+  - id: relay_gpt_4_1
+    agent_id: relay_gpt_4_1
+    provider_model: relay/gpt-4.1
+    executor: openclaw-minimal
+
+  - id: relay_gpt_5_4
+    agent_id: relay_gpt_5_4
+    provider_model: relay/gpt-5.4
+    executor: openclaw-minimal
+
+  - id: relay_gemini_3_pro_preview
+    agent_id: relay_gemini_3_pro_preview
+    provider_model: relay/gemini-3-pro-preview
+    executor: openclaw-minimal
+
+  - id: relay_gemini_3_flash_preview
+    agent_id: relay_gemini_3_flash_preview
+    provider_model: relay/gemini-3-flash-preview
+    executor: openclaw-minimal
+
+  - id: relay_gemini_3_1_flash_lite_preview
+    agent_id: relay_gemini_3_1_flash_lite_preview
+    provider_model: relay/gemini-3.1-flash-lite-preview
+    executor: openclaw-minimal
+
+  - id: relay_gpt_5_2
+    agent_id: relay_gpt_5_2
+    provider_model: relay/gpt-5.2
+    executor: openclaw-minimal
+
+  - id: relay_gpt_5_4_mini
+    agent_id: relay_gpt_5_4_mini
+    provider_model: relay/gpt-5.4-mini
+    executor: openclaw-minimal
+
+  - id: relay_gemini_3_flash_preview_thinking
+    agent_id: relay_gemini_3_flash_preview_thinking
+    provider_model: relay/gemini-3-flash-preview-thinking
+    executor: openclaw-minimal

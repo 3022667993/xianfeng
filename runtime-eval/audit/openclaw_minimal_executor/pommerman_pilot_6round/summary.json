@@ -1,0 +1,135 @@
+{
+  "status": "PASS",
+  "experiment": "pommerman_pilot",
+  "regime": "A00",
+  "executor": "openclaw-minimal",
+  "audit_count": 5,
+  "expected_audit_count": 5,
+  "audits": [
+    {
+      "path": "workspace/posts/pommerman_pilot/left/codebase_post_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "provider": "relay",
+      "model": "gpt-4.1",
+      "workspaceDir": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "forbiddenTools": [],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_pilot/left/codebase_post_3/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "provider": "relay",
+      "model": "gpt-4.1",
+      "workspaceDir": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "forbiddenTools": [],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_pilot/left/codebase_post_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "provider": "relay",
+      "model": "gpt-4.1",
+      "workspaceDir": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "forbiddenTools": [],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_pilot/left/codebase_post_5/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "provider": "relay",
+      "model": "gpt-4.1",
+      "workspaceDir": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "forbiddenTools": [],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_pilot/left/codebase_post_6/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "provider": "relay",
+      "model": "gpt-4.1",
+      "workspaceDir": "/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "forbiddenTools": [],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    }
+  ]
+}

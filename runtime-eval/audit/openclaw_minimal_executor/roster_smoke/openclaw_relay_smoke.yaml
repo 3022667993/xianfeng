@@ -1,0 +1,5 @@
+models:
+  - id: relay_gpt_4_1
+    agent_id: relay_gpt_4_1
+    provider_model: relay/gpt-4.1
+    executor: openclaw-minimal

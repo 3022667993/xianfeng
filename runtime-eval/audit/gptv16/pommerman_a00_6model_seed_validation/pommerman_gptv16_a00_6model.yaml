@@ -1,0 +1,33 @@
+name: pommerman_gptv16_a00_6model
+game: pommerman_1v1
+regime: A00
+
+num_models: 6
+num_rounds: 10
+matches_per_round: 3
+independent_tournaments: 5
+
+schedule:
+  type: double_round_robin
+  agents: 6
+  rounds: 10
+  matches_per_round: 3
+
+pommerman:
+  proxy: fixed_background_ffa
+  seat_swap: true
+  fixed_background_agents:
+    - dummy2
+    - dummy3
+  same_seed_for_swapped_pair: true
+  pair_level_scoring: paired_average
+
+artifacts:
+  save_diff: true
+  save_logs: true
+  save_stdout_stderr: true
+  save_test_calls: true
+  save_arena_calls: true
+  save_revision_audit: true
+  save_pairing_manifest: true
+  save_seat_swap_manifest: true

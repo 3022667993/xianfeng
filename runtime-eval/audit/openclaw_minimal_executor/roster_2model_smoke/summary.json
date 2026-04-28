@@ -1,0 +1,64 @@
+{
+  "status": "PASS",
+  "experiment": "pommerman_2model_roster_smoke",
+  "regime": "A00",
+  "executor": "openclaw-minimal",
+  "audit_count": 2,
+  "expected_audit_count": 2,
+  "items": [
+    {
+      "path": "workspace/posts/pommerman_2model_roster_smoke/left/codebase_post_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_4_1",
+      "agentId": "relay_gpt_4_1",
+      "providerModel": "relay/gpt-4.1",
+      "provider": "relay",
+      "model": "gpt-4.1",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_2model_roster_smoke/right/codebase_post_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    }
+  ]
+}

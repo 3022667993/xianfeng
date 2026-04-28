@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "game": "PLACEHOLDER_GAME",
+    "protocol": "adaptive",
+    "round_idx": 1,
+    "match_id": "smoke_round_1_match_1",
+    "regime": "A00",
+    "repo_version": "PLACEHOLDER"
+  },
+  "outcome": {
+    "winner": "left",
+    "result": "placeholder"
+  },
+  "scorecard": {
+    "left_score": 0,
+    "right_score": 0
+  },
+  "runtime_diagnostics": {
+    "compile_ok": true,
+    "runtime_ok": true,
+    "invalid_actions": 0,
+    "timeout": false,
+    "stderr_excerpt": ""
+  },
+  "artifacts": {
+    "scorecard_path": "logs/round_1/scorecard.json",
+    "stderr_path": "logs/round_1/stderr.log",
+    "build_log_path": "logs/round_1/build.log",
+    "test_log_path": "logs/round_1/test.log",
+    "diff_path": "logs/round_1/diff.patch"
+  }
+}

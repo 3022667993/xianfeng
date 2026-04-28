@@ -1,0 +1,14 @@
+{
+  "event": "run_done",
+  "timestamp": "2026-04-28T07:37:16Z",
+  "elapsed_seconds": 0.119,
+  "tournament_name": "pommerman_gptv16_a00_6model",
+  "regime": "A00",
+  "independent_tournaments": 5,
+  "total_rounds": 10,
+  "matches_per_round": 3,
+  "completed_matches": 150,
+  "total_matches": 150,
+  "completed_audits": 0,
+  "expected_audits": 270
+}

@@ -1,0 +1,11 @@
+name: pommerman_1v1
+adapter: pommerman_1v1
+
+starter_repo: starter_repos/pommerman_1v1
+submission_entry: submission/main.py
+
+wrappers:
+  build: scripts/build.sh
+  run_submission: scripts/run_submission.sh
+  smoke_test: tests/smoke.sh
+  run_arena: scripts/run_arena.sh

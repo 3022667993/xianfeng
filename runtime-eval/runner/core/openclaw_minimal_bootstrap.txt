@@ -1,0 +1,29 @@
+OpenClaw-Minimal Bootstrap
+
+Mode:
+- fresh session only
+- no file memory
+- no session carryover
+- skills disabled
+- browser disabled
+- web disabled
+- automation disabled
+- subagents disabled
+- fixed minimal bootstrap
+
+Allowed inputs:
+- current codebase_post_t directory
+- previous round feedback_package.json
+- this bootstrap file
+
+Allowed edits:
+- only codebase_post_t/submission/main.py
+- append/update codebase_post_t/notes/revision_log.md
+
+Task:
+- read previous feedback_package.json scorecard.left_right_winner
+- for pommerman_1v1 A00 left side only:
+  if previous winner is right, toggle AGGRESSION between 0 and 1
+  otherwise leave AGGRESSION unchanged
+- keep codebase_post_t runnable
+- report success/failure and changed files

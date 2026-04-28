@@ -1,0 +1,15 @@
+name: pommerman_4model_roster_smoke
+game: pommerman_1v1
+regime: A00
+
+num_models: 4
+num_rounds: 3
+matches_per_round: 2
+independent_tournaments: 1
+
+artifacts:
+  save_diff: true
+  save_logs: true
+  save_stdout_stderr: true
+  save_test_calls: true
+  save_arena_calls: true

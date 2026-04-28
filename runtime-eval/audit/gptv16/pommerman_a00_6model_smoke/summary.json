@@ -1,0 +1,1502 @@
+{
+  "status": "PASS",
+  "experiment": "pommerman_gptv16_a00_6model_smoke",
+  "regime": "A00",
+  "schedule": "6-agent double round-robin",
+  "seat_swap": true,
+  "match_count": 30,
+  "round_counts": {
+    "1": 3,
+    "2": 3,
+    "3": 3,
+    "4": 3,
+    "5": 3,
+    "6": 3,
+    "7": 3,
+    "8": 3,
+    "9": 3,
+    "10": 3
+  },
+  "audit_count": 54,
+  "expected_models": [
+    "relay_gemini_3_1_flash_lite_preview",
+    "relay_gemini_3_flash_preview_thinking",
+    "relay_gemini_3_pro_preview",
+    "relay_gpt_5_2",
+    "relay_gpt_5_4",
+    "relay_gpt_5_4_mini"
+  ],
+  "seen_models": [
+    "relay_gemini_3_1_flash_lite_preview",
+    "relay_gemini_3_flash_preview_thinking",
+    "relay_gemini_3_pro_preview",
+    "relay_gpt_5_2",
+    "relay_gpt_5_4",
+    "relay_gpt_5_4_mini"
+  ],
+  "missing_models": [],
+  "audit_items": [
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r10_m2_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r2_m2_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r3_m3_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r4_m3_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r5_m2_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r6_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r7_m2_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r8_m3_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_1_flash_lite_preview/codebase_post_r9_m3_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_1_flash_lite_preview",
+      "agentId": "relay_gemini_3_1_flash_lite_preview",
+      "providerModel": "relay/gemini-3.1-flash-lite-preview",
+      "provider": "relay",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r10_m3_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r2_m2_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r3_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r4_m2_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r5_m3_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r6_m3_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r7_m2_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r8_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_flash_preview_thinking/codebase_post_r9_m2_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_flash_preview_thinking",
+      "agentId": "relay_gemini_3_flash_preview_thinking",
+      "providerModel": "relay/gemini-3-flash-preview-thinking",
+      "provider": "relay",
+      "model": "gemini-3-flash-preview-thinking",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r10_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r2_m3_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r3_m3_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r4_m2_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r5_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r6_m2_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r7_m3_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r8_m3_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gemini_3_pro_preview/codebase_post_r9_m2_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gemini_3_pro_preview",
+      "agentId": "relay_gemini_3_pro_preview",
+      "providerModel": "relay/gemini-3-pro-preview",
+      "provider": "relay",
+      "model": "gemini-3-pro-preview",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r10_m2_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r2_m3_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [
+        "submission/main.py"
+      ],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r3_m2_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r4_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r5_m2_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r6_m3_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r7_m3_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r8_m2_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_2/codebase_post_r9_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_2",
+      "agentId": "relay_gpt_5_2",
+      "providerModel": "relay/gpt-5.2",
+      "provider": "relay",
+      "model": "gpt-5.2",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r10_m1_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r2_m1_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r3_m1_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r4_m1_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r5_m1_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r6_m1_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r7_m1_vs_relay_gpt_5_4_mini/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r8_m1_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4/codebase_post_r9_m1_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4",
+      "agentId": "relay_gpt_5_4",
+      "providerModel": "relay/gpt-5.4",
+      "provider": "relay",
+      "model": "gpt-5.4",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r10_m3_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r2_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [
+        "submission/main.py"
+      ],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r3_m2_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r4_m3_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r5_m3_vs_relay_gemini_3_flash_preview_thinking/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r6_m2_vs_relay_gemini_3_pro_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r7_m1_vs_relay_gpt_5_4/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r8_m2_vs_relay_gpt_5_2/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    },
+    {
+      "path": "workspace/posts/pommerman_gptv16_a00_6model_smoke/relay_gpt_5_4_mini/codebase_post_r9_m3_vs_relay_gemini_3_1_flash_lite_preview/revision_audit.json",
+      "success": true,
+      "errors": [],
+      "modelId": "relay_gpt_5_4_mini",
+      "agentId": "relay_gpt_5_4_mini",
+      "providerModel": "relay/gpt-5.4-mini",
+      "provider": "relay",
+      "model": "gpt-5.4-mini",
+      "toolNames": [
+        "read",
+        "edit",
+        "write",
+        "exec"
+      ],
+      "injectedWorkspaceFiles": [
+        "AGENTS.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md"
+      ],
+      "forbiddenTools": [],
+      "forbiddenInjectedWorkspaceFiles": [],
+      "realForbiddenWorkspaceFiles": [],
+      "changedFiles": [],
+      "disallowedChangedFiles": []
+    }
+  ]
+}
