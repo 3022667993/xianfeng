@@ -1,0 +1,16 @@
+name: pommerman_gptv16_a00_6model_execution_smoke
+game: pommerman_1v1
+regime: A00
+
+num_models: 6
+num_rounds: 1
+matches_per_round: 3
+independent_tournaments: 1
+execution_smoke: true
+
+artifacts:
+  save_diff: true
+  save_logs: true
+  save_stdout_stderr: true
+  save_test_calls: true
+  save_arena_calls: true

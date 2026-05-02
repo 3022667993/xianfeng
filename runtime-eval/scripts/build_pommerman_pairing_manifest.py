@@ -28,10 +28,13 @@ def _identity_from_metadata(metadata: dict, side: str) -> str | None:
 
 
 def _seed_and_status(scorecard: dict) -> tuple[object, str]:
-    seed = scorecard.get("applied_seed")
-    if seed is None:
-        return None, "not_recorded_in_current_smoke"
-    return seed, "recorded"
+    status = scorecard.get("seed_control_status")
+    requested_seed = scorecard.get("requested_seed")
+    applied_seed = scorecard.get("applied_seed")
+    seed = scorecard.get("seed")
+    if status is None:
+        return None, None, None, "not_recorded_in_current_smoke"
+    return seed, requested_seed, applied_seed, str(status)
 
 
 def build_manifest(logs_root: Path) -> dict:
@@ -45,8 +48,8 @@ def build_manifest(logs_root: Path) -> dict:
         agent_a = "smoke_agent_A"
         agent_b = "smoke_agent_B"
 
-    seed1, status1 = _seed_and_status(sc1)
-    seed2, status2 = _seed_and_status(sc2)
+    seed1, requested1, applied1, status1 = _seed_and_status(sc1)
+    seed2, requested2, applied2, status2 = _seed_and_status(sc2)
 
     return {
         "schema_version": "pommerman_pairing_manifest_v1",
@@ -70,6 +73,8 @@ def build_manifest(logs_root: Path) -> dict:
                         "result_path": "logs/round_1/scorecard.json",
                         "arena_result_path": "logs/round_1/arena_result_match_a.json",
                         "seed": seed1,
+                        "requested_seed": requested1,
+                        "applied_seed": applied1,
                         "seed_control_status": status1,
                     },
                     {
@@ -80,6 +85,8 @@ def build_manifest(logs_root: Path) -> dict:
                         "result_path": "logs/round_2/scorecard.json",
                         "arena_result_path": "logs/round_2/arena_result_match_a.json",
                         "seed": seed2,
+                        "requested_seed": requested2,
+                        "applied_seed": applied2,
                         "seed_control_status": status2,
                     },
                 ],

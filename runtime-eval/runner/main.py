@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import time
 from pathlib import Path
 
@@ -38,6 +39,282 @@ def _safe_progress_value(value):
     if isinstance(value, Path):
         return str(value)
     return str(value)
+
+
+def _smoke_requested_seed(tournament: dict) -> int:
+    seed = tournament.get("seed")
+    if seed is None:
+        # Stable fallback for the Pommerman+A00 smoke artifact.
+        return 1001
+    return int(seed)
+
+
+def _write_round_seed_provenance(round_dir: Path, requested_seed: int, applied_seed: int | None) -> None:
+    seed_control_status = "applied" if applied_seed is not None else "requested_but_not_applied"
+    seed = applied_seed if applied_seed is not None else None
+    for name in ("arena_result_match_a.json", "arena_result_match_b.json", "scorecard.json"):
+        path = round_dir / name
+        if not path.exists():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["requested_seed"] = requested_seed
+        payload["applied_seed"] = applied_seed
+        payload["seed"] = seed
+        payload["seed_control_status"] = seed_control_status
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _execution_smoke_base_seed(tournament: dict) -> int:
+    seed = tournament.get("seed")
+    if seed is None:
+        seed = tournament.get("base_seed")
+    if seed is None:
+        # Stable fallback for the execution-smoke schedule.
+        return 1001
+    return int(seed)
+
+
+def _execution_smoke_round_robin_round(entries: list[dict]) -> list[tuple[dict, dict]]:
+    if len(entries) != 6:
+        return []
+    order = list(entries)
+    half = len(order) // 2
+    left_half = order[:half]
+    right_half = list(reversed(order[half:]))
+    return list(zip(left_half, right_half))
+
+
+def _execution_smoke_pair_seed(pair_id: str, base_seed: int) -> int:
+    material = f"{pair_id}|{base_seed}"
+    return int(hashlib.sha256(material.encode("utf-8")).hexdigest()[:8], 16) & 0x7FFFFFFF
+
+
+def _execution_smoke_cleanup(tournament_name: str) -> None:
+    for root in [
+        Path("workspace/codebases") / tournament_name,
+        Path("workspace/submissions") / tournament_name,
+        Path("workspace/posts") / tournament_name,
+    ]:
+        if root.exists():
+            shutil.rmtree(root)
+    round_dir = Path("logs") / "round_1"
+    if round_dir.exists():
+        shutil.rmtree(round_dir)
+
+
+def _execution_smoke_model_entries(roster_models: list[dict]) -> list[dict]:
+    entries: list[dict] = []
+    for idx, entry in enumerate(roster_models, start=1):
+        if not isinstance(entry, dict):
+            continue
+        model_id = entry.get("id")
+        if not isinstance(model_id, str) or not model_id.strip():
+            model_id = f"model_{idx}"
+        agent_id = entry.get("agent_id")
+        if not isinstance(agent_id, str) or not agent_id.strip():
+            agent_id = model_id
+        entries.append(
+            {
+                "id": model_id,
+                "agent_id": agent_id,
+                "provider_model": entry.get("provider_model"),
+                "executor": entry.get("executor"),
+            }
+        )
+    return entries
+
+
+def _run_execution_smoke_tournament(
+    *,
+    adapter,
+    game_cfg: dict,
+    tournament: dict,
+    regime: dict,
+    roster_models: list[dict],
+    starter_repo: Path,
+    valid: bool,
+    validate_msg: str,
+    smoke_only: bool,
+) -> None:
+    tournament_name = tournament["name"]
+    _execution_smoke_cleanup(tournament_name)
+
+    round_dir = Path("logs") / "round_1"
+    round_dir.mkdir(parents=True, exist_ok=True)
+
+    roster_entries = _execution_smoke_model_entries(roster_models)
+    round_pairs = _execution_smoke_round_robin_round(roster_entries)
+    base_seed = _execution_smoke_base_seed(tournament)
+
+    round_manifest_matches: list[dict] = []
+
+    for match_slot, (left_meta, right_meta) in enumerate(round_pairs, start=1):
+        match_dir = round_dir / f"match_{match_slot}"
+        match_dir.mkdir(parents=True, exist_ok=True)
+
+        left_id = left_meta["id"]
+        right_id = right_meta["id"]
+        left_agent_id = left_meta.get("agent_id") or left_id
+        right_agent_id = right_meta.get("agent_id") or right_id
+        left_provider_model = left_meta.get("provider_model")
+        right_provider_model = right_meta.get("provider_model")
+        left_executor = left_meta.get("executor")
+        right_executor = right_meta.get("executor")
+
+        left_codebase = Path("workspace/codebases") / tournament_name / left_agent_id / "codebase_play_1"
+        right_codebase = Path("workspace/codebases") / tournament_name / right_agent_id / "codebase_play_1"
+        left_submission = Path("workspace/submissions") / tournament_name / left_agent_id / "submission_1"
+        right_submission = Path("workspace/submissions") / tournament_name / right_agent_id / "submission_1"
+        left_post = Path("workspace/posts") / tournament_name / left_agent_id / "codebase_post_1"
+        right_post = Path("workspace/posts") / tournament_name / right_agent_id / "codebase_post_1"
+
+        copy_tree(starter_repo, left_codebase)
+        copy_tree(starter_repo, right_codebase)
+
+        left_export_ok, left_export_msg = adapter.export_submission(left_codebase, left_submission)
+        right_export_ok, right_export_msg = adapter.export_submission(right_codebase, right_submission)
+
+        if valid and left_export_ok and right_export_ok:
+            match_result = adapter.run_match(left_codebase, right_codebase, match_dir, game_cfg)
+        else:
+            match_result = {
+                "winner": "draw",
+                "result": "validation_or_export_failed",
+                "runtime_diagnostics": {
+                    "compile_ok": False,
+                    "runtime_ok": False,
+                    "invalid_actions": 1,
+                    "timeout": False,
+                    "stderr_excerpt": validate_msg,
+                    "validate_submission_ok": valid,
+                    "validate_submission_msg": validate_msg,
+                    "left_export_ok": left_export_ok,
+                    "left_export_msg": left_export_msg,
+                    "right_export_ok": right_export_ok,
+                    "right_export_msg": right_export_msg,
+                },
+            }
+
+        left_rev_ok, left_rev_msg = apply_minimal_revision(
+            left_codebase,
+            left_post,
+            1,
+            "left",
+            game=tournament["game"],
+            regime=regime["name"],
+            model_id=left_id,
+            executor=left_executor,
+            openclaw_agent_id=left_meta.get("agent_id"),
+            provider_model=left_provider_model,
+        )
+        right_rev_ok, right_rev_msg = apply_minimal_revision(
+            right_codebase,
+            right_post,
+            1,
+            "right",
+            game=tournament["game"],
+            regime=regime["name"],
+            model_id=right_id,
+            executor=right_executor,
+            openclaw_agent_id=right_meta.get("agent_id"),
+            provider_model=right_provider_model,
+        )
+
+        pair_id = "__vs__".join(sorted([left_id, right_id]))
+        requested_seed = _execution_smoke_pair_seed(pair_id, base_seed)
+        _write_round_seed_provenance(match_dir, requested_seed=requested_seed, applied_seed=None)
+
+        metadata_payload = {
+            "round_idx": 1,
+            "match_idx": match_slot,
+            "match_id": f"match_{match_slot}",
+            "game": tournament["game"],
+            "regime": regime["name"],
+            "tournament": tournament_name,
+            "execution_smoke": True,
+            "smoke_only": smoke_only,
+            "left_model_id": left_id,
+            "left_agent_id": left_agent_id,
+            "left_provider_model": left_provider_model,
+            "left_executor": left_executor,
+            "right_model_id": right_id,
+            "right_agent_id": right_agent_id,
+            "right_provider_model": right_provider_model,
+            "right_executor": right_executor,
+            "pair_id": pair_id,
+            "seat_assignment": {
+                "left": left_agent_id,
+                "right": right_agent_id,
+                "background_agents": ["dummy2", "dummy3"],
+            },
+            "background_agents": ["dummy2", "dummy3"],
+            "requested_seed": requested_seed,
+            "applied_seed": None,
+            "seed": None,
+            "seed_control_status": "requested_but_not_applied",
+            "starter_repo": str(starter_repo),
+            "validate_submission_ok": valid,
+            "validate_submission_msg": validate_msg,
+            "left_export_ok": left_export_ok,
+            "left_export_msg": left_export_msg,
+            "right_export_ok": right_export_ok,
+            "right_export_msg": right_export_msg,
+            "left_revision_ok": left_rev_ok,
+            "left_revision_msg": left_rev_msg,
+            "right_revision_ok": right_rev_ok,
+            "right_revision_msg": right_rev_msg,
+            "left_codebase_path": str(left_codebase),
+            "right_codebase_path": str(right_codebase),
+            "left_submission_path": str(left_submission),
+            "right_submission_path": str(right_submission),
+            "left_post_path": str(left_post),
+            "right_post_path": str(right_post),
+            "metadata_path": str(match_dir / "metadata.json"),
+            "scorecard_path": str(match_dir / "scorecard.json"),
+            "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
+            "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
+            "status": "execution-smoke-complete",
+            "winner": match_result["winner"],
+            "result": match_result["result"],
+        }
+
+        write_json(match_dir / "metadata.json", metadata_payload)
+
+        round_manifest_matches.append(
+            {
+                "match_id": f"match_{match_slot}",
+                "match_idx": match_slot,
+                "left_agent_id": left_agent_id,
+                "right_agent_id": right_agent_id,
+                "left_submission_path": str(left_submission),
+                "right_submission_path": str(right_submission),
+                "requested_seed": requested_seed,
+                "applied_seed": None,
+                "seed": None,
+                "seed_control_status": "requested_but_not_applied",
+                "seat_assignment": {
+                    "left": left_agent_id,
+                    "right": right_agent_id,
+                    "background_agents": ["dummy2", "dummy3"],
+                },
+                "background_agents": ["dummy2", "dummy3"],
+                "metadata_path": str(match_dir / "metadata.json"),
+                "scorecard_path": str(match_dir / "scorecard.json"),
+                "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
+                "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
+                "pair_id": pair_id,
+            }
+        )
+
+    round_manifest_payload = {
+        "round_idx": 1,
+        "matches_per_round": 3,
+        "matches": round_manifest_matches,
+        "execution_smoke": True,
+        "background_agents": ["dummy2", "dummy3"],
+        "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
+    }
+    write_json(round_dir / "round_manifest.json", round_manifest_payload)
 
 
 def emit_progress(event: str, *, started_at: float, **fields) -> None:
@@ -114,6 +391,7 @@ def main() -> None:
 
     adapter = get_adapter(game_cfg["adapter"])
     starter_repo = Path(game_cfg["starter_repo"])
+    execution_smoke = bool(tournament.get("execution_smoke", False))
 
     roster_models = models_cfg.get("models", []) if isinstance(models_cfg, dict) else []
     left_model = roster_models[0] if isinstance(roster_models, list) and len(roster_models) > 0 else None
@@ -166,6 +444,29 @@ def main() -> None:
                 raise ValueError(
                     f"Model '{model_id}' has unsupported executor '{executor}'; expected 'openclaw-minimal'"
                 )
+    if execution_smoke:
+        if args.models is None:
+            raise ValueError("execution_smoke requires --models")
+        if not isinstance(roster_models, list) or len(roster_models) != 6:
+            raise ValueError("execution_smoke requires exactly 6 models")
+        if int(tournament.get("num_rounds", 0)) != 1:
+            raise ValueError("execution_smoke requires num_rounds=1")
+        if int(tournament.get("matches_per_round", 0)) != 3:
+            raise ValueError("execution_smoke requires matches_per_round=3")
+        _run_execution_smoke_tournament(
+            adapter=adapter,
+            game_cfg=game_cfg,
+            tournament=tournament,
+            regime=regime,
+            roster_models=roster_models,
+            starter_repo=starter_repo,
+            valid=valid,
+            validate_msg=validate_msg,
+            smoke_only=smoke_only,
+        )
+        print("Created execution-smoke round_1 match artifacts and round_manifest.json")
+        print("Smoke skeleton v6 OK.")
+        return
 
     if use_generic_roster:
         roster_entries = []
@@ -847,6 +1148,8 @@ def main() -> None:
 
     prev_left_post = None
     prev_right_post = None
+    requested_seed = _smoke_requested_seed(tournament)
+    applied_seed: int | None = None
 
     for round_idx in range(1, tournament["num_rounds"] + 1):
         round_dir = ensure_round_dir(round_idx)
@@ -874,6 +1177,7 @@ def main() -> None:
                 round_dir,
                 game_cfg,
             )
+            _write_round_seed_provenance(round_dir, requested_seed=requested_seed, applied_seed=applied_seed)
         else:
             match_result = {
                 "winner": "draw",
@@ -950,6 +1254,10 @@ def main() -> None:
                 "right_agent_id": right_agent_id,
                 "right_provider_model": right_provider_model,
                 "right_executor": right_executor,
+                "requested_seed": requested_seed,
+                "applied_seed": applied_seed,
+                "seed": applied_seed,
+                "seed_control_status": "applied" if applied_seed is not None else "requested_but_not_applied",
                 "smoke_only": smoke_only,
             },
             "outcome": {
@@ -997,6 +1305,10 @@ def main() -> None:
             "right_agent_id": right_agent_id,
             "right_provider_model": right_provider_model,
             "right_executor": right_executor,
+            "requested_seed": requested_seed,
+            "applied_seed": applied_seed,
+            "seed": applied_seed,
+            "seed_control_status": "applied" if applied_seed is not None else "requested_but_not_applied",
             "smoke_only": smoke_only,
             "starter_repo": str(starter_repo),
             "validate_submission_ok": valid,

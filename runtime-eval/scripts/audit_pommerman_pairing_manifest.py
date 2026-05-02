@@ -67,13 +67,36 @@ def audit_manifest(workspace_root: Path, manifest_path: Path) -> tuple[list[str]
                 errors.append(f"{label}: arena_result_path missing on disk")
 
             seed = leg.get("seed")
+            requested_seed = leg.get("requested_seed")
+            applied_seed = leg.get("applied_seed")
             status = leg.get("seed_control_status")
-            if seed is None:
-                if status != "not_recorded_in_current_smoke":
-                    errors.append(f"{label}: null seed requires not_recorded_in_current_smoke")
+            if status == "not_recorded_in_current_smoke":
+                if seed is not None or requested_seed is not None or applied_seed is not None:
+                    errors.append(f"{label}: not_recorded_in_current_smoke requires all seed fields null")
                 warnings.append(f"{label}: seed not recorded (status=not_recorded_in_current_smoke)")
-            elif status != "recorded":
-                errors.append(f"{label}: non-null seed requires seed_control_status=recorded")
+            elif status == "requested_but_not_applied":
+                if requested_seed is None:
+                    errors.append(f"{label}: requested_but_not_applied requires non-null requested_seed")
+                if applied_seed is not None or seed is not None:
+                    errors.append(f"{label}: requested_but_not_applied requires null applied_seed and seed")
+                warnings.append(f"{label}: seed requested but not applied")
+            elif status == "applied":
+                if applied_seed is None:
+                    errors.append(f"{label}: applied status requires non-null applied_seed")
+                if seed != applied_seed:
+                    errors.append(f"{label}: applied status requires seed == applied_seed")
+            else:
+                errors.append(f"{label}: unsupported seed_control_status={status!r}")
+
+        requested1 = leg1.get("requested_seed")
+        requested2 = leg2.get("requested_seed")
+        if requested1 != requested2:
+            errors.append(f"{pid}: requested_seed mismatch across legs")
+
+        applied1 = leg1.get("applied_seed")
+        applied2 = leg2.get("applied_seed")
+        if applied1 is not None and applied2 is not None and applied1 != applied2:
+            errors.append(f"{pid}: applied_seed mismatch across legs")
 
     return errors, warnings
 
