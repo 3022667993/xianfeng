@@ -344,6 +344,7 @@ def apply_minimal_revision(
     game: str = "",
     regime: str = "",
     model_id: str | None = None,
+    executor: str | None = None,
     openclaw_agent_id: str | None = None,
     provider_model: str | None = None,
 ) -> tuple[bool, str]:
@@ -356,11 +357,46 @@ def apply_minimal_revision(
     log_path = notes_dir / "revision_log.md"
     previous_winner = _read_feedback_winner(round_idx)
 
-    use_openclaw_minimal = bool(openclaw_agent_id) or (
-        game == "pommerman_1v1"
-        and regime == "A00"
-        and side == "left"
-    )
+    # Real model runs must be fail-closed and never fall back to rule-minimal.
+    if model_id:
+        if not executor:
+            _append_revision_log(
+                log_path=log_path,
+                round_idx=round_idx,
+                side=side,
+                changed=False,
+                old_aggression=_read_aggression(submission_main_path),
+                new_aggression=_read_aggression(submission_main_path),
+                reason="missing executor for model-backed revision",
+                executor="unknown",
+                success=False,
+                changed_files=[],
+                model_id=model_id,
+                agent_id=openclaw_agent_id,
+                provider_model=provider_model,
+            )
+            return False, "minimal revision failed: missing executor for model-backed revision"
+        if executor != "openclaw-minimal":
+            _append_revision_log(
+                log_path=log_path,
+                round_idx=round_idx,
+                side=side,
+                changed=False,
+                old_aggression=_read_aggression(submission_main_path),
+                new_aggression=_read_aggression(submission_main_path),
+                reason=f"unsupported executor for model-backed revision: {executor}",
+                executor=executor,
+                success=False,
+                changed_files=[],
+                model_id=model_id,
+                agent_id=openclaw_agent_id,
+                provider_model=provider_model,
+            )
+            return False, f"minimal revision failed: unsupported executor '{executor}' for model-backed revision"
+
+    # Smoke/pilot runs without model metadata may use rule-minimal.
+    # OpenClaw is selected whenever executor is openclaw-minimal or agent id is provided.
+    use_openclaw_minimal = bool(openclaw_agent_id) or executor == "openclaw-minimal"
     if use_openclaw_minimal:
         return _apply_openclaw_minimal_revision(
             codebase_post_dir=codebase_post_dir,
@@ -386,3 +422,29 @@ def apply_minimal_revision(
         agent_id=openclaw_agent_id,
         provider_model=provider_model,
     )
+
+def apply_noop_revision(
+    codebase_play_dir: Path,
+    codebase_post_dir: Path,
+    round_idx: int,
+    side: str,
+) -> tuple[bool, str]:
+    """Backward-compatible no-op revision used by smoke tests.
+
+    Copies codebase_play_dir to codebase_post_dir and appends a minimal
+    revision log entry without changing the submission.
+    """
+    copy_tree(codebase_play_dir, codebase_post_dir)
+
+    notes_dir = codebase_post_dir / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    log_path = notes_dir / "revision_log.md"
+
+    prev = ""
+    if log_path.exists():
+        prev = log_path.read_text(encoding="utf-8")
+
+    prev += f"\n- round_{round_idx}: noop revision for {side}\n"
+    log_path.write_text(prev, encoding="utf-8")
+
+    return True, "noop revision applied"

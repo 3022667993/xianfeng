@@ -92,6 +92,7 @@ def main() -> None:
     regime = load_yaml(args.regime)
     tournament = load_yaml(args.tournament)
     models_cfg = load_yaml(args.models) if args.models else {}
+    smoke_only = args.models is None
 
     require_keys(regime, ["name", "description"], "regime config")
     require_keys(
@@ -153,6 +154,19 @@ def main() -> None:
         and len(roster_models) % 2 == 0
         and tournament.get("num_models") == len(roster_models)
     )
+    if args.models is not None:
+        for idx, entry in enumerate(roster_models, start=1):
+            if not isinstance(entry, dict):
+                raise ValueError(f"Model entry #{idx} must be a mapping")
+            model_id = entry.get("id") or f"model_{idx}"
+            executor = entry.get("executor")
+            if not executor:
+                raise ValueError(f"Model '{model_id}' missing required executor")
+            if executor != "openclaw-minimal":
+                raise ValueError(
+                    f"Model '{model_id}' has unsupported executor '{executor}'; expected 'openclaw-minimal'"
+                )
+
     if use_generic_roster:
         roster_entries = []
         for idx, entry in enumerate(roster_models):
@@ -495,6 +509,7 @@ def main() -> None:
                         game=tournament["game"],
                         regime=regime["name"],
                         model_id=left_id,
+                        executor=left_executor,
                         openclaw_agent_id=left_agent_id,
                         provider_model=left_provider_model,
                     )
@@ -558,6 +573,7 @@ def main() -> None:
                         game=tournament["game"],
                         regime=regime["name"],
                         model_id=right_id,
+                        executor=right_executor,
                         openclaw_agent_id=right_agent_id,
                         provider_model=right_provider_model,
                     )
@@ -626,6 +642,7 @@ def main() -> None:
                             "pair_id": pair_id,
                             "seat_swap_leg": seat_swap_leg,
                             "seed": pair_seed,
+                            "smoke_only": smoke_only,
                         },
                         "outcome": {
                             "winner": match_result["winner"],
@@ -677,6 +694,7 @@ def main() -> None:
                         "pair_id": pair_id,
                         "seat_swap_leg": seat_swap_leg,
                         "seed": pair_seed,
+                        "smoke_only": smoke_only,
                         "starter_repo": str(starter_repo),
                         "validate_submission_ok": valid,
                         "validate_submission_msg": validate_msg,
@@ -883,6 +901,7 @@ def main() -> None:
             game=tournament["game"],
             regime=regime["name"],
             model_id=left_model_id,
+            executor=left_executor,
             openclaw_agent_id=left_agent_id,
             provider_model=left_provider_model,
         )
@@ -894,6 +913,7 @@ def main() -> None:
             game=tournament["game"],
             regime=regime["name"],
             model_id=right_model_id,
+            executor=right_executor,
             openclaw_agent_id=right_agent_id,
             provider_model=right_provider_model,
         )
@@ -930,6 +950,7 @@ def main() -> None:
                 "right_agent_id": right_agent_id,
                 "right_provider_model": right_provider_model,
                 "right_executor": right_executor,
+                "smoke_only": smoke_only,
             },
             "outcome": {
                 "winner": match_result["winner"],
@@ -976,6 +997,7 @@ def main() -> None:
             "right_agent_id": right_agent_id,
             "right_provider_model": right_provider_model,
             "right_executor": right_executor,
+            "smoke_only": smoke_only,
             "starter_repo": str(starter_repo),
             "validate_submission_ok": valid,
             "validate_submission_msg": validate_msg,
