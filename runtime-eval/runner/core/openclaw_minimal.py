@@ -40,6 +40,10 @@ FORBIDDEN_BOOTSTRAP_NAMES = {
     "BOOTSTRAP.md",
     "MEMORY.md",
 }
+DEFAULT_OPENCLAW_PLACEHOLDERS = {
+    "SOUL.md",
+    "BOOTSTRAP.md",
+}
 
 FORBIDDEN_WORKSPACE_FILES = {
     "SOUL.md",
@@ -128,6 +132,7 @@ def _run_openclaw_agent(
     message: str,
     *,
     agent_id: str,
+    provider_model: str | None = None,
 ) -> tuple[dict[str, Any] | None, str, str, int]:
     commands = [
         [
@@ -157,6 +162,9 @@ def _run_openclaw_agent(
             str(OPENCLAW_TIMEOUT_SECONDS),
         ],
     ]
+    if provider_model:
+        for cmd in commands:
+            cmd.extend(["--model", provider_model])
 
     last_stdout = ""
     last_stderr = ""
@@ -249,6 +257,7 @@ def _audit_openclaw_response(
     injected = report.get("injectedWorkspaceFiles", [])
     injected_summary = []
     forbidden_injected = []
+    default_missing_placeholders = []
 
     if isinstance(injected, list):
         for item in injected:
@@ -268,7 +277,10 @@ def _audit_openclaw_response(
             injected_summary.append(entry)
 
             if name in FORBIDDEN_BOOTSTRAP_NAMES:
-                forbidden_injected.append(entry)
+                if name in DEFAULT_OPENCLAW_PLACEHOLDERS and missing:
+                    default_missing_placeholders.append(name)
+                else:
+                    forbidden_injected.append(entry)
 
     tools_report = report.get("tools", {})
     tools_entries = tools_report.get("entries", []) if isinstance(tools_report, dict) else []
@@ -300,6 +312,11 @@ def _audit_openclaw_response(
     if state_path.exists():
         real_forbidden_workspace_files.append(str(state_path))
 
+    skills = report.get("skills")
+    skills_prompt_chars = 0
+    if isinstance(skills, dict):
+        skills_prompt_chars = int(skills.get("promptChars", 0) or 0)
+
     return {
         "provider": meta.get("agentMeta", {}).get("provider") if isinstance(meta.get("agentMeta"), dict) else None,
         "model": meta.get("agentMeta", {}).get("model") if isinstance(meta.get("agentMeta"), dict) else None,
@@ -308,13 +325,33 @@ def _audit_openclaw_response(
         "forbiddenInjectedWorkspaceFiles": forbidden_injected,
         "toolNames": tool_names,
         "forbiddenTools": sorted(set(forbidden_tools)),
-        "skills": report.get("skills"),
+        "skills": skills,
+        "skillsPromptChars": skills_prompt_chars,
         "realForbiddenWorkspaceFiles": real_forbidden_workspace_files,
+        "openclawDefaultMissingPlaceholders": sorted(set(default_missing_placeholders)),
         "finalAssistantVisibleText": meta.get("finalAssistantVisibleText"),
         "stopReason": meta.get("stopReason"),
         "executionTrace": meta.get("executionTrace"),
         "rawSystemPromptReportPresent": bool(report),
     }
+
+
+def _provider_route_status(requested_provider_model: str | None, execution_trace: Any) -> tuple[str, str | None, str | None]:
+    if not isinstance(execution_trace, dict):
+        return "unknown", None, None
+    actual_provider = execution_trace.get("winnerProvider")
+    actual_model = execution_trace.get("winnerModel")
+    if not isinstance(actual_provider, str) or not isinstance(actual_model, str):
+        return "unknown", actual_provider if isinstance(actual_provider, str) else None, actual_model if isinstance(actual_model, str) else None
+    if not requested_provider_model:
+        return "unknown", actual_provider, actual_model
+    req = requested_provider_model.lower()
+    am = actual_model.lower()
+    ap = actual_provider.lower()
+    req_token = req.split("/", 1)[-1]
+    if req_token in am or req_token in ap:
+        return "matched", actual_provider, actual_model
+    return "mismatch", actual_provider, actual_model
 
 
 def _write_audit(path: Path, payload: dict[str, Any]) -> None:
@@ -444,6 +481,7 @@ def main() -> None:
         response, stdout, stderr, returncode = _run_openclaw_agent(
             message,
             agent_id=agent_id,
+            provider_model=provider_model,
         )
 
         after_temp_snapshot = _snapshot_files(run_codebase_post_t)
@@ -478,11 +516,17 @@ def main() -> None:
             errors.append("forbidden tools present")
         if audit.get("realForbiddenWorkspaceFiles"):
             errors.append("forbidden real workspace files present")
+        if int(audit.get("skillsPromptChars", 0) or 0) > 0:
+            errors.append("skills prompt must be empty for openclaw-minimal")
         if disallowed_changed_files:
             errors.append("disallowed changed files present")
         if original_changed_unexpectedly:
             errors.append("original codebase_post_dir changed unexpectedly during isolated run")
 
+        provider_route_status, actual_provider, actual_model = _provider_route_status(
+            provider_model,
+            audit.get("executionTrace"),
+        )
         success = len(errors) == 0
 
         if success and changed_files_temp:
@@ -507,6 +551,10 @@ def main() -> None:
             "agentId": agent_id,
             "modelId": model_id,
             "providerModel": provider_model,
+            "requestedProviderModel": provider_model,
+            "actualProvider": actual_provider,
+            "actualModel": actual_model,
+            "providerRouteStatus": provider_route_status,
             "runDir": str(run_dir),
             "game": args.game,
             "regime": args.regime,
@@ -525,6 +573,7 @@ def main() -> None:
             "openclawStderrTail": stderr[-4000:],
             "systemPromptReport": system_prompt_report,
             "openclawAudit": audit,
+            "openclawDefaultMissingPlaceholders": audit.get("openclawDefaultMissingPlaceholders", []),
             "allowedChangedFiles": sorted(ALLOWED_CHANGED_FILES),
             "changedFilesTemp": changed_files_temp,
             "disallowedChangedFiles": disallowed_changed_files,
@@ -542,9 +591,16 @@ def main() -> None:
             "agent_id": agent_id,
             "model_id": model_id,
             "provider_model": provider_model,
+            "requested_provider_model": provider_model,
             "audit_path": str(audit_path),
             "provider": audit.get("provider"),
             "model": audit.get("model"),
+            "actual_provider": actual_provider,
+            "actual_model": actual_model,
+            "provider_route_status": provider_route_status,
+            "openclaw_default_missing_placeholders": audit.get("openclawDefaultMissingPlaceholders", []),
+            "audit_warnings": [],
+            "audit_errors": errors,
             "previous_winner": previous_winner,
             "error": "; ".join(errors) if errors else None,
         }
@@ -565,6 +621,7 @@ def main() -> None:
             "agentId": agent_id,
             "modelId": model_id,
             "providerModel": provider_model,
+            "requestedProviderModel": provider_model,
             "runDir": str(run_dir),
             "game": args.game,
             "regime": args.regime,
@@ -588,9 +645,16 @@ def main() -> None:
                     "agent_id": agent_id,
                     "model_id": model_id,
                     "provider_model": provider_model,
+                    "requested_provider_model": provider_model,
                     "audit_path": str(audit_path),
                     "provider": audit.get("provider"),
                     "model": audit.get("model"),
+                    "actual_provider": None,
+                    "actual_model": None,
+                    "provider_route_status": "unknown",
+                    "openclaw_default_missing_placeholders": [],
+                    "audit_warnings": [],
+                    "audit_errors": [repr(exc)],
                     "previous_winner": previous_winner,
                     "error": repr(exc),
                 },

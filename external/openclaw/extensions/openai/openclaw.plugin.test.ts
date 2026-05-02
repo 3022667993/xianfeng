@@ -17,6 +17,12 @@ const manifest = JSON.parse(
   }>;
 };
 
+const packageJson = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+) as {
+  dependencies?: Record<string, string>;
+};
+
 function manifestComparableWizardFields(choice: {
   choiceId?: string;
   choiceLabel?: string;
@@ -53,6 +59,11 @@ function providerWizardByKey() {
 }
 
 describe("OpenAI plugin manifest", () => {
+  it("keeps runtime dependencies in the package manifest", () => {
+    expect(packageJson.dependencies?.["@mariozechner/pi-ai"]).toBe("0.71.1");
+    expect(packageJson.dependencies?.ws).toBe("^8.20.0");
+  });
+
   it("keeps removed Codex CLI import auth choice as a deprecated browser-login alias", () => {
     const codexBrowserLogin = manifest.providerAuthChoices?.find(
       (choice) => choice.choiceId === "openai-codex",
@@ -74,21 +85,28 @@ describe("OpenAI plugin manifest", () => {
     expect(codexBrowserLogin).toMatchObject({
       choiceLabel: "OpenAI Codex Browser Login",
       choiceHint: "Sign in with OpenAI in your browser",
-      groupHint: "API key or Codex sign-in",
+      groupId: "openai-codex",
+      groupLabel: "OpenAI Codex",
+      groupHint: "ChatGPT/Codex sign-in",
     });
     expect(codexDeviceCode).toMatchObject({
       choiceLabel: "OpenAI Codex Device Pairing",
       choiceHint: "Pair in browser with a device code",
-      groupHint: "API key or Codex sign-in",
+      groupId: "openai-codex",
+      groupLabel: "OpenAI Codex",
+      groupHint: "ChatGPT/Codex sign-in",
     });
     expect(apiKey).toMatchObject({
       choiceLabel: "OpenAI API Key",
-      groupHint: "API key or Codex sign-in",
+      groupId: "openai",
+      groupLabel: "OpenAI",
+      groupHint: "Direct API key",
     });
     expect(choices.map((choice) => choice.choiceLabel)).not.toContain(
       "OpenAI Codex (ChatGPT OAuth)",
     );
     expect(choices.map((choice) => choice.groupHint)).not.toContain("Codex OAuth + API key");
+    expect(choices.map((choice) => choice.groupHint)).not.toContain("API key or Codex sign-in");
   });
 
   it("keeps auth choice copy aligned with provider wizard metadata", () => {

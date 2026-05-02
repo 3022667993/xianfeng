@@ -17,6 +17,14 @@ export const telegramChannelConfigUiHints = {
     label: "Telegram DM Policy",
     help: 'Direct message access control ("pairing" recommended). "open" requires channels.telegram.allowFrom=["*"].',
   },
+  "dm.threadReplies": {
+    label: "Telegram DM Thread Replies",
+    help: 'Controls whether Telegram DMs with message_thread_id use flat sessions ("off", default) or thread-scoped sessions ("inbound" or "always"). Thread IDs are still preserved for replies when sessions stay flat.',
+  },
+  "direct.*.threadReplies": {
+    label: "Telegram Per-DM Thread Replies",
+    help: 'Per-DM override for message_thread_id session threading. Use "inbound" only when a specific direct chat intentionally uses Telegram DM topics as separate sessions.',
+  },
   configWrites: {
     label: "Telegram Config Writes",
     help: "Allow Telegram to write config in response to channel events/commands (default: true).",
@@ -31,7 +39,7 @@ export const telegramChannelConfigUiHints = {
   },
   streaming: {
     label: "Telegram Streaming Mode",
-    help: 'Unified Telegram stream preview mode: "off" | "partial" | "block" | "progress" (default: "partial"). "progress" maps to "partial" on Telegram. Legacy boolean/streamMode keys are auto-mapped.',
+    help: 'Unified Telegram stream preview mode: "off" | "partial" | "block" | "progress" (default: "partial"). "progress" maps to "partial" on Telegram. Legacy boolean/streamMode keys are detected; run doctor --fix to migrate.',
   },
   "streaming.mode": {
     label: "Telegram Streaming Mode",
@@ -63,7 +71,7 @@ export const telegramChannelConfigUiHints = {
   },
   "streaming.preview.toolProgress": {
     label: "Telegram Draft Tool Progress",
-    help: "Show tool/progress activity in the live draft preview message (default: true). Set false to keep tool updates as separate messages.",
+    help: "Show tool/progress activity in the live draft preview message (default: true when preview streaming is active). Set false to keep tool updates out of the edited Telegram preview.",
   },
   "retry.attempts": {
     label: "Telegram Retry Attempts",
@@ -103,7 +111,7 @@ export const telegramChannelConfigUiHints = {
   },
   apiRoot: {
     label: "Telegram API Root URL",
-    help: "Custom Telegram Bot API root URL. Use for self-hosted Bot API servers (https://github.com/tdlib/telegram-bot-api) or reverse proxies in regions where api.telegram.org is blocked.",
+    help: "Custom Telegram Bot API root URL. Use the API root only (for example https://api.telegram.org), not a full /bot<TOKEN> endpoint. Use for self-hosted Bot API servers (https://github.com/tdlib/telegram-bot-api) or reverse proxies in regions where api.telegram.org is blocked.",
   },
   trustedLocalFileRoots: {
     label: "Telegram Trusted Local File Roots",
@@ -135,7 +143,7 @@ export const telegramChannelConfigUiHints = {
   },
   "execApprovals.approvers": {
     label: "Telegram Exec Approval Approvers",
-    help: "Telegram user IDs allowed to approve exec requests for this bot account. Use numeric Telegram user IDs. If you leave this unset, OpenClaw falls back to numeric owner IDs inferred from channels.telegram.allowFrom and direct-message defaultTo when possible.",
+    help: "Telegram user IDs allowed to approve exec requests for this bot account. Use numeric Telegram user IDs. If you leave this unset, OpenClaw falls back to numeric owner IDs inferred from commands.ownerAllowFrom when possible.",
   },
   "execApprovals.agentFilter": {
     label: "Telegram Exec Approval Agent Filter",
@@ -161,12 +169,12 @@ export const telegramChannelConfigUiHints = {
     label: "Telegram Thread Binding Max Age (hours)",
     help: "Optional hard max age in hours for Telegram bound sessions. Set 0 to disable hard cap (default: 0). Overrides session.threadBindings.maxAgeHours when set.",
   },
-  "threadBindings.spawnSubagentSessions": {
-    label: "Telegram Thread-Bound Subagent Spawn",
-    help: "Allow subagent spawns with thread=true to auto-bind Telegram current conversations when supported.",
+  "threadBindings.spawnSessions": {
+    label: "Telegram Thread-Bound Session Spawn",
+    help: "Allow sessions_spawn(thread=true) and ACP thread spawns to auto-bind Telegram current conversations when supported.",
   },
-  "threadBindings.spawnAcpSessions": {
-    label: "Telegram Thread-Bound ACP Spawn",
-    help: "Allow ACP spawns with thread=true to auto-bind Telegram current conversations when supported.",
+  "threadBindings.defaultSpawnContext": {
+    label: "Telegram Thread Spawn Context",
+    help: 'Default native subagent context for thread-bound spawns. "fork" starts from the requester transcript; "isolated" starts clean. Default: "fork".',
   },
 } satisfies Record<string, ChannelConfigUiHint>;

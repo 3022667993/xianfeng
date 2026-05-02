@@ -55,8 +55,8 @@ const DEFAULT_MODEL =
   resolveCliBackendLiveTest(DEFAULT_PROVIDER)?.defaultModelRef ?? "claude-cli/claude-sonnet-4-6";
 // The cron/MCP live probe now tolerates more cancelled tool-call retries in CI,
 // so the outer test budget needs enough headroom to finish those retries.
-const CLI_BACKEND_LIVE_TIMEOUT_MS = 720_000;
-const CLI_BACKEND_REQUEST_TIMEOUT_MS = 240_000;
+const CLI_BACKEND_LIVE_TIMEOUT_MS = 20 * 60_000;
+const CLI_BACKEND_REQUEST_TIMEOUT_MS = 600_000;
 const CLI_BACKEND_AGENT_TIMEOUT_SECONDS = Math.max(
   1,
   Math.ceil(CLI_BACKEND_REQUEST_TIMEOUT_MS / 1000) - 10,
@@ -72,6 +72,29 @@ function logCliBackendLiveStep(step: string, details?: Record<string, unknown>):
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function openAiProviderConfigForCodexCli(
+  modelKey: string,
+): NonNullable<NonNullable<OpenClawConfig["models"]>["providers"]>["openai"] {
+  const parsed = parseModelRef(modelKey, DEFAULT_PROVIDER);
+  const modelId = parsed?.model?.trim() || "gpt-5.5";
+  return {
+    api: "openai-responses",
+    baseUrl: "https://api.openai.com/v1",
+    models: [
+      {
+        contextWindow: 1_047_576,
+        cost: { cacheRead: 0, cacheWrite: 0, input: 0, output: 0 },
+        id: modelId,
+        input: ["text"],
+        maxTokens: 32_768,
+        name: modelId,
+        reasoning: true,
+      },
+    ],
+    timeoutSeconds: Math.ceil(CLI_BACKEND_REQUEST_TIMEOUT_MS / 1000),
+  };
 }
 
 function isProviderCapacityError(error: unknown): boolean {
@@ -235,12 +258,10 @@ describeLive("gateway live (cli backend)", () => {
       const schemaProbePluginPath = CLI_MCP_SCHEMA_PROBE
         ? await createMcpSchemaProbePlugin(tempDir)
         : undefined;
+      const useMinimalToolsProfile = providerId === "codex-cli" && !schemaProbePluginPath;
       process.env.OPENCLAW_STATE_DIR = stateDir;
       const bundleMcp = backendResolved?.bundleMcp === true;
-      const bootstrapWorkspace =
-        backendResolved?.bundleMcpMode === "claude-config-file"
-          ? await createBootstrapWorkspace(tempDir)
-          : null;
+      const bootstrapWorkspace = await createBootstrapWorkspace(tempDir);
       const disableMcpConfig = process.env.OPENCLAW_LIVE_CLI_BACKEND_DISABLE_MCP_CONFIG !== "0";
       let cliArgs = baseCliArgs;
       if (
@@ -285,6 +306,27 @@ describeLive("gateway live (cli backend)", () => {
           port,
           auth: { mode: "token", token },
         },
+        models:
+          providerId === "codex-cli"
+            ? {
+                ...cfg.models,
+                providers: {
+                  ...cfg.models?.providers,
+                  openai: {
+                    ...openAiProviderConfigForCodexCli(modelKey),
+                    ...cfg.models?.providers?.openai,
+                  },
+                },
+              }
+            : cfg.models,
+        ...(useMinimalToolsProfile
+          ? {
+              tools: {
+                ...cfg.tools,
+                profile: "minimal" as const,
+              },
+            }
+          : {}),
         agents: {
           ...cfg.agents,
           defaults: {
@@ -295,6 +337,7 @@ describeLive("gateway live (cli backend)", () => {
               [modelKey]: {},
               ...(modelSwitchTarget ? { [modelSwitchTarget]: {} } : {}),
             },
+            agentRuntime: { id: "pi", fallback: "pi" },
             cliBackends: {
               ...existingBackends,
               [providerId]: {
@@ -353,11 +396,14 @@ describeLive("gateway live (cli backend)", () => {
             {
               sessionKey,
               idempotencyKey: `idem-${randomUUID()}`,
-              message: enableCliModelSwitchProbe
-                ? `Please include the token CLI-BACKEND-${nonce} in your reply.` +
-                  ` Also remember this session note for later: ${memoryToken}.` +
-                  " Do not include the note in your reply."
-                : `Please include the token CLI-BACKEND-${nonce} in your reply.`,
+              message:
+                providerId === "codex-cli"
+                  ? `Do not inspect files or run tools. Reply with exactly: CLI-BACKEND-${nonce}.`
+                  : enableCliModelSwitchProbe
+                    ? `Please include the token CLI-BACKEND-${nonce} in your reply.` +
+                      ` Also remember this session note for later: ${memoryToken}.` +
+                      " Do not include the note in your reply."
+                    : `Please include the token CLI-BACKEND-${nonce} in your reply.`,
               deliver: false,
               timeout: CLI_BACKEND_AGENT_TIMEOUT_SECONDS,
             },
@@ -456,7 +502,7 @@ describeLive("gateway live (cli backend)", () => {
                   idempotencyKey: `idem-${randomUUID()}`,
                   message:
                     providerId === "codex-cli"
-                      ? `Please include the token CLI-RESUME-${resumeNonce} in your reply.`
+                      ? `Do not inspect files or run tools. Reply with exactly: CLI-RESUME-${resumeNonce}.`
                       : `Reply with exactly: CLI backend RESUME OK ${resumeNonce}.`,
                   deliver: false,
                   timeout: CLI_BACKEND_AGENT_TIMEOUT_SECONDS,
@@ -536,7 +582,7 @@ describeLive("gateway live (cli backend)", () => {
         clearRuntimeConfigSnapshot();
         await client.stopAndWait();
         await server.close();
-        await fs.rm(tempDir, { recursive: true, force: true });
+        await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
         restoreCliBackendLiveEnv(previousEnv);
         logCliBackendLiveStep("cleanup:done");
       }

@@ -17,6 +17,14 @@ describe("createTtsTool", () => {
     expect(tool.description).toContain(SILENT_REPLY_TOKEN);
   });
 
+  it("requires explicit user or config audio intent in guidance text", () => {
+    const tool = createTtsTool();
+
+    expect(tool.description).toContain("Use only for explicit audio intent");
+    expect(tool.description).toContain("active TTS config");
+    expect(tool.description).toContain("Never use for ordinary text replies");
+  });
+
   it("stores audio delivery in details.media and preserves the spoken text in content", async () => {
     textToSpeechSpy.mockResolvedValue({
       success: true,
@@ -43,6 +51,28 @@ describe("createTtsTool", () => {
     expect(JSON.stringify(result.content)).not.toContain("MEDIA:");
   });
 
+  it("uses audioAsVoice from the TTS runtime even when the provider output is not native", async () => {
+    textToSpeechSpy.mockResolvedValue({
+      success: true,
+      audioPath: "/tmp/reply.mp3",
+      provider: "test",
+      voiceCompatible: false,
+      audioAsVoice: true,
+    });
+
+    const tool = createTtsTool();
+    const result = await tool.execute("call-1", { text: "hello", channel: "feishu" });
+
+    expect(result).toMatchObject({
+      details: {
+        media: {
+          mediaUrl: "/tmp/reply.mp3",
+          audioAsVoice: true,
+        },
+      },
+    });
+  });
+
   it("passes an optional timeout to speech generation", async () => {
     textToSpeechSpy.mockResolvedValue({
       success: true,
@@ -61,6 +91,44 @@ describe("createTtsTool", () => {
       }),
     );
     expect(result.details).toMatchObject({ timeoutMs: 12_345 });
+  });
+
+  it("passes the active agent id to speech generation", async () => {
+    textToSpeechSpy.mockResolvedValue({
+      success: true,
+      audioPath: "/tmp/reply.opus",
+      provider: "test",
+      voiceCompatible: true,
+    });
+
+    const tool = createTtsTool({ agentId: "voice-agent" });
+    await tool.execute("call-1", { text: "hello" });
+
+    expect(textToSpeechSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "hello",
+        agentId: "voice-agent",
+      }),
+    );
+  });
+
+  it("passes the active account id to speech generation", async () => {
+    textToSpeechSpy.mockResolvedValue({
+      success: true,
+      audioPath: "/tmp/reply.opus",
+      provider: "test",
+      voiceCompatible: true,
+    });
+
+    const tool = createTtsTool({ agentAccountId: "feishu-main" });
+    await tool.execute("call-1", { text: "hello" });
+
+    expect(textToSpeechSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "hello",
+        accountId: "feishu-main",
+      }),
+    );
   });
 
   it("echoes longer utterances verbatim into the tool-result content", async () => {

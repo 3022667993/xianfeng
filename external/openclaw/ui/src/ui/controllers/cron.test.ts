@@ -3,6 +3,7 @@ import { DEFAULT_CRON_FORM } from "../app-defaults.ts";
 import {
   addCronJob,
   cancelCronEdit,
+  loadCronModelSuggestions,
   loadCronJobsPage,
   loadCronRuns,
   loadMoreCronRuns,
@@ -58,6 +59,27 @@ function createState(overrides: Partial<CronState> = {}): CronState {
 }
 
 describe("cron controller", () => {
+  it("loads model suggestions from the configured model view", async () => {
+    const request = vi.fn(async () => ({
+      models: [
+        { id: "z-model", provider: "zai" },
+        { id: "a-model", provider: "anthropic" },
+        { id: "z-model", provider: "other" },
+        { provider: "missing-id" },
+      ],
+    }));
+    const state = {
+      client: { request } as unknown as CronState["client"],
+      connected: true,
+      cronModelSuggestions: [],
+    };
+
+    await loadCronModelSuggestions(state);
+
+    expect(request).toHaveBeenCalledWith("models.list", { view: "configured" });
+    expect(state.cronModelSuggestions).toEqual(["a-model", "z-model"]);
+  });
+
   it("normalizes stale announce mode when session/payload no longer support announce", () => {
     const normalized = normalizeCronFormState({
       ...DEFAULT_CRON_FORM,
@@ -1257,7 +1279,7 @@ describe("cron controller", () => {
       client: { request } as unknown as CronState["client"],
     });
 
-    await loadCronRuns(state, "job-1");
+    await expect(loadCronRuns(state, "job-1")).resolves.toBe("ok");
     expect(state.cronRuns).toHaveLength(1);
     expect(state.cronRunsHasMore).toBe(true);
 
@@ -1265,6 +1287,19 @@ describe("cron controller", () => {
     expect(state.cronRuns).toHaveLength(2);
     expect(state.cronRuns[0]?.summary).toBe("newest");
     expect(state.cronRuns[1]?.summary).toBe("older");
+  });
+
+  it("returns an error status when run history loading fails", async () => {
+    const request = vi.fn(async () => {
+      throw new Error("cron.runs unavailable");
+    });
+    const state = createState({
+      client: { request } as unknown as CronState["client"],
+    });
+
+    await expect(loadCronRuns(state, null)).resolves.toBe("error");
+
+    expect(state.cronError).toBe("Error: cron.runs unavailable");
   });
 
   it("runs cron job in due mode when requested", async () => {

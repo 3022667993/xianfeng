@@ -1,7 +1,7 @@
 models:
   - id: relay_bailian_deepseek_v4_flash
     agent_id: relay_bailian_deepseek_v4_flash
-    provider_model: bailian/deepseek-v4-flash
+    provider_model: relay/bailian/deepseek-v4-flash
     executor: openclaw-minimal
     stratum: light
 

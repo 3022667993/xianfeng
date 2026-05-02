@@ -5,6 +5,7 @@ import {
   acquireLocalHeavyCheckLockSync,
   applyLocalOxlintPolicy,
   applyLocalTsgoPolicy,
+  resolveLocalHeavyCheckEnv,
   shouldAcquireLocalHeavyCheckLockForOxlint,
   shouldAcquireLocalHeavyCheckLockForTsgo,
 } from "../../scripts/lib/local-heavy-check-runtime.mjs";
@@ -22,14 +23,43 @@ const ROOMY_HOST = {
 };
 
 function makeEnv(overrides: Record<string, string | undefined> = {}) {
-  return {
+  const env = {
     ...process.env,
     OPENCLAW_LOCAL_CHECK: "1",
     ...overrides,
   };
+  if (!Object.hasOwn(overrides, "OPENCLAW_LOCAL_CHECK_MODE")) {
+    delete env.OPENCLAW_LOCAL_CHECK_MODE;
+  }
+  return env;
 }
 
 describe("local-heavy-check-runtime", () => {
+  it("reenables local heavy-check policy for local wrapper entrypoints", () => {
+    expect(resolveLocalHeavyCheckEnv({ OPENCLAW_LOCAL_CHECK: "0", PATH: "/usr/bin" })).toEqual({
+      OPENCLAW_LOCAL_CHECK: "1",
+      PATH: "/usr/bin",
+    });
+    expect(resolveLocalHeavyCheckEnv({ OPENCLAW_LOCAL_CHECK: "false", PATH: "/usr/bin" })).toEqual({
+      OPENCLAW_LOCAL_CHECK: "1",
+      PATH: "/usr/bin",
+    });
+  });
+
+  it("preserves local-check disablement in CI", () => {
+    expect(
+      resolveLocalHeavyCheckEnv({
+        CI: "true",
+        OPENCLAW_LOCAL_CHECK: "0",
+        PATH: "/usr/bin",
+      }),
+    ).toEqual({
+      CI: "true",
+      OPENCLAW_LOCAL_CHECK: "0",
+      PATH: "/usr/bin",
+    });
+  });
+
   it("tightens local tsgo runs on constrained hosts", () => {
     const { args, env } = applyLocalTsgoPolicy([], makeEnv(), CONSTRAINED_HOST);
 
@@ -202,6 +232,8 @@ describe("local-heavy-check-runtime", () => {
       "--type-aware",
       "--tsconfig",
       "tsconfig.oxlint.json",
+      "--allow",
+      "eslint/no-underscore-dangle",
       "--report-unused-disable-directives-severity",
       "error",
       "--threads=1",
@@ -215,9 +247,26 @@ describe("local-heavy-check-runtime", () => {
       "--type-aware",
       "--tsconfig",
       "tsconfig.oxlint.json",
+      "--allow",
+      "eslint/no-underscore-dangle",
       "--report-unused-disable-directives-severity",
       "error",
       "--threads=1",
+    ]);
+  });
+
+  it("honors an explicit oxlint thread count", () => {
+    const { args } = applyLocalOxlintPolicy(["--threads=8"], makeEnv(), ROOMY_HOST);
+
+    expect(args).toEqual([
+      "--threads=8",
+      "--type-aware",
+      "--tsconfig",
+      "tsconfig.oxlint.json",
+      "--allow",
+      "eslint/no-underscore-dangle",
+      "--report-unused-disable-directives-severity",
+      "error",
     ]);
   });
 
@@ -234,6 +283,8 @@ describe("local-heavy-check-runtime", () => {
       "--type-aware",
       "--tsconfig",
       "tsconfig.oxlint.json",
+      "--allow",
+      "eslint/no-underscore-dangle",
       "--report-unused-disable-directives-severity",
       "error",
     ]);

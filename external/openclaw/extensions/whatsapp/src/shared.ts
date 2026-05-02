@@ -38,7 +38,7 @@ import {
   isLegacyGroupSessionKey,
 } from "./session-contract.js";
 
-export const WHATSAPP_CHANNEL = "whatsapp" as const;
+const WHATSAPP_CHANNEL = "whatsapp" as const;
 
 const WHATSAPP_GROUP_SCOPE_FIELDS = ["groupPolicy", "groupAllowFrom", "groups"] as const;
 
@@ -94,8 +94,12 @@ export async function loadWhatsAppChannelRuntime() {
   return await import("./channel.runtime.js");
 }
 
+async function loadWhatsAppSetupSurface() {
+  return await import("./setup-surface.js");
+}
+
 export const whatsappSetupWizardProxy = createWhatsAppSetupWizardProxy(
-  async () => (await loadWhatsAppChannelRuntime()).whatsappSetupWizard,
+  async () => (await loadWhatsAppSetupSurface()).whatsappSetupWizard,
 );
 
 const whatsappConfigAdapter = createScopedChannelConfigAdapter<ResolvedWhatsAppAccount>({
@@ -119,7 +123,7 @@ const whatsappResolveDmPolicy = createScopedDmSecurityResolver<ResolvedWhatsAppA
   inheritSharedDefaultsFromDefaultAccount: true,
 });
 
-export function createWhatsAppSetupWizardProxy(
+function createWhatsAppSetupWizardProxy(
   loadWizard: () => Promise<ChannelSetupWizard>,
 ): ChannelSetupWizard {
   return createDelegatedSetupWizardProxy({
@@ -208,6 +212,12 @@ export function createWhatsAppPluginBase(params: {
       polls: true,
       reactions: true,
       media: true,
+      tts: {
+        voice: {
+          synthesisTarget: "voice-note",
+          transcodesAudio: true,
+        },
+      },
     },
     reload: { configPrefixes: ["web"], noopPrefixes: ["channels.whatsapp"] },
     gatewayMethods: ["web.login.start", "web.login.wait"],

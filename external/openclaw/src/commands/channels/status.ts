@@ -23,8 +23,6 @@ import {
 } from "./shared.js";
 import { formatConfigChannelsStatusLines } from "./status-config-format.js";
 
-export { formatConfigChannelsStatusLines } from "./status-config-format.js";
-
 export type ChannelsStatusOptions = {
   json?: boolean;
   probe?: boolean;
@@ -44,6 +42,10 @@ function formatChannelsStatusError(err: unknown): string {
 export function formatGatewayChannelsStatusLines(payload: Record<string, unknown>): string[] {
   const lines: string[] = [];
   lines.push(theme.success("Gateway reachable."));
+  const channelLabels =
+    payload.channelLabels && typeof payload.channelLabels === "object"
+      ? (payload.channelLabels as Record<string, unknown>)
+      : {};
   const accountLines = (provider: ChatChannel, accounts: Array<Record<string, unknown>>) =>
     accounts.map((account) => {
       const bits: string[] = [];
@@ -118,7 +120,10 @@ export function formatGatewayChannelsStatusLines(payload: Record<string, unknown
       if (typeof account.lastError === "string" && account.lastError) {
         bits.push(`error:${account.lastError}`);
       }
-      return buildChannelAccountLine(provider, account, bits);
+      const rawChannelLabel = channelLabels[provider];
+      return buildChannelAccountLine(provider, account, bits, {
+        channelLabel: typeof rawChannelLabel === "string" ? rawChannelLabel : provider,
+      });
     });
 
   const accountsByChannel = payload.channelAccounts as Record<string, unknown> | undefined;

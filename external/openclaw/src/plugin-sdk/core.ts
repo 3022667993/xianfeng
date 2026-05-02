@@ -48,6 +48,26 @@ export type {
   OpenClawPluginService,
   OpenClawPluginServiceContext,
   PluginCommandContext,
+  PluginCommandResult,
+  PluginAgentEventSubscriptionRegistration,
+  PluginAgentTurnPrepareEvent,
+  PluginAgentTurnPrepareResult,
+  PluginControlUiDescriptor,
+  PluginHeartbeatPromptContributionEvent,
+  PluginHeartbeatPromptContributionResult,
+  PluginJsonValue,
+  PluginNextTurnInjection,
+  PluginNextTurnInjectionEnqueueResult,
+  PluginNextTurnInjectionRecord,
+  PluginRunContextGetParams,
+  PluginRunContextPatch,
+  PluginRuntimeLifecycleRegistration,
+  PluginSessionSchedulerJobHandle,
+  PluginSessionSchedulerJobRegistration,
+  PluginSessionExtensionRegistration,
+  PluginSessionExtensionProjection,
+  PluginToolMetadataRegistration,
+  PluginTrustedToolPolicyRegistration,
   PluginLogger,
   ProviderAuthContext,
   ProviderAuthDoctorHintContext,
@@ -503,8 +523,16 @@ export function defineChannelPluginEntry<TPlugin>({
         registerCliMetadata?.(api);
         return;
       }
-      setRuntime?.(api.runtime);
+      if (api.registrationMode === "tool-discovery") {
+        registerFull?.(api);
+        return;
+      }
       api.registerChannel({ plugin: plugin as ChannelPlugin });
+      setRuntime?.(api.runtime);
+      if (api.registrationMode === "discovery") {
+        registerCliMetadata?.(api);
+        return;
+      }
       if (api.registrationMode !== "full") {
         return;
       }

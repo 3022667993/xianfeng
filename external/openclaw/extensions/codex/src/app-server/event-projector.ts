@@ -1,17 +1,20 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, Usage } from "@mariozechner/pi-ai";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
 import {
+  classifyAgentHarnessTerminalOutcome,
+  embeddedAgentLog,
+  emitAgentEvent as emitGlobalAgentEvent,
   formatErrorMessage,
+  formatToolAggregate,
   formatToolProgressOutput,
   inferToolMetaFromArgs,
   normalizeUsage,
   runAgentHarnessAfterCompactionHook,
   runAgentHarnessBeforeCompactionHook,
+  TOOL_PROGRESS_OUTPUT_MAX_CHARS,
+  type AgentMessage,
   type EmbeddedRunAttemptParams,
   type EmbeddedRunAttemptResult,
-  TOOL_PROGRESS_OUTPUT_MAX_CHARS,
-  formatToolAggregate,
+  type HeartbeatToolResponse,
   type MessagingToolSend,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { readCodexTurn } from "./protocol-validators.js";
@@ -23,12 +26,14 @@ import {
   type JsonObject,
   type JsonValue,
 } from "./protocol.js";
+import { readCodexMirroredSessionHistoryMessages } from "./session-history.js";
 
 export type CodexAppServerToolTelemetry = {
   didSendViaMessagingTool: boolean;
   messagingToolSentTexts: string[];
   messagingToolSentMediaUrls: string[];
   messagingToolSentTargets: MessagingToolSend[];
+  heartbeatToolResponse?: HeartbeatToolResponse;
   toolMediaUrls?: string[];
   toolAudioAsVoice?: boolean;
   successfulCronAdds?: number;
@@ -56,6 +61,13 @@ const CURRENT_TOKEN_USAGE_KEYS = [
   "lastCallUsage",
   "lastTokenUsage",
   "last_token_usage",
+] as const;
+
+const CODEX_PROMPT_TOTAL_INPUT_KEYS = [
+  "inputTokens",
+  "input_tokens",
+  "promptTokens",
+  "prompt_tokens",
 ] as const;
 
 const MAX_TOOL_OUTPUT_DELTA_MESSAGES_PER_ITEM = 20;
@@ -150,7 +162,10 @@ export class CodexAppServerEventProjector {
         this.handleRawResponseItemCompleted(params);
         break;
       case "error":
-        this.promptError = readString(params, "message") ?? "codex app-server error";
+        if (readBooleanAlias(params, ["willRetry", "will_retry"]) === true) {
+          break;
+        }
+        this.promptError = readCodexErrorNotificationMessage(params) ?? "codex app-server error";
         this.promptErrorSource = "prompt";
         break;
       default:
@@ -192,6 +207,13 @@ export class CodexAppServerEventProjector {
     const promptError =
       this.promptError ??
       (turnFailed ? (this.completedTurn?.error?.message ?? "codex app-server turn failed") : null);
+    const agentHarnessResultClassification = classifyAgentHarnessTerminalOutcome({
+      assistantTexts,
+      reasoningText,
+      planText,
+      promptError,
+      turnCompleted: Boolean(this.completedTurn),
+    });
     return {
       aborted: this.aborted || turnInterrupted,
       externalAbort: false,
@@ -201,6 +223,7 @@ export class CodexAppServerEventProjector {
       promptError,
       promptErrorSource: promptError ? this.promptErrorSource || "prompt" : null,
       sessionIdUsed: this.params.sessionId,
+      ...(agentHarnessResultClassification ? { agentHarnessResultClassification } : {}),
       bootstrapPromptWarningSignaturesSeen: this.params.bootstrapPromptWarningSignaturesSeen,
       bootstrapPromptWarningSignature: this.params.bootstrapPromptWarningSignature,
       messagesSnapshot,
@@ -211,6 +234,7 @@ export class CodexAppServerEventProjector {
       messagingToolSentTexts: toolTelemetry.messagingToolSentTexts,
       messagingToolSentMediaUrls: toolTelemetry.messagingToolSentMediaUrls,
       messagingToolSentTargets: toolTelemetry.messagingToolSentTargets,
+      heartbeatToolResponse: toolTelemetry.heartbeatToolResponse,
       toolMediaUrls: toolTelemetry.toolMediaUrls,
       toolAudioAsVoice: toolTelemetry.toolAudioAsVoice,
       successfulCronAdds: toolTelemetry.successfulCronAdds,
@@ -313,7 +337,7 @@ export class CodexAppServerEventProjector {
       this.activeCompactionItemIds.add(itemId);
       await runAgentHarnessBeforeCompactionHook({
         sessionFile: this.params.sessionFile,
-        messages: this.readMirroredSessionMessages(),
+        messages: await this.readMirroredSessionMessages(),
         ctx: {
           runId: this.params.runId,
           agentId: this.params.agentId,
@@ -364,7 +388,7 @@ export class CodexAppServerEventProjector {
       this.completedCompactionCount += 1;
       await runAgentHarnessAfterCompactionHook({
         sessionFile: this.params.sessionFile,
-        messages: this.readMirroredSessionMessages(),
+        messages: await this.readMirroredSessionMessages(),
         compactedCount: -1,
         ctx: {
           runId: this.params.runId,
@@ -693,9 +717,23 @@ export class CodexAppServerEventProjector {
     event: Parameters<NonNullable<EmbeddedRunAttemptParams["onAgentEvent"]>>[0],
   ): void {
     try {
-      this.params.onAgentEvent?.(event);
-    } catch {
+      emitGlobalAgentEvent({
+        runId: this.params.runId,
+        stream: event.stream,
+        data: event.data,
+        ...(this.params.sessionKey ? { sessionKey: this.params.sessionKey } : {}),
+      });
+    } catch (error) {
+      embeddedAgentLog.debug("codex app-server global agent event emit failed", { error });
+    }
+    try {
+      const maybePromise = this.params.onAgentEvent?.(event);
+      void Promise.resolve(maybePromise).catch((error: unknown) => {
+        embeddedAgentLog.debug("codex app-server agent event handler rejected", { error });
+      });
+    } catch (error) {
       // Downstream event consumers must not corrupt the canonical Codex turn projection.
+      embeddedAgentLog.debug("codex app-server agent event handler threw", { error });
     }
   }
 
@@ -725,12 +763,8 @@ export class CodexAppServerEventProjector {
     this.assistantItemOrder.push(itemId);
   }
 
-  private readMirroredSessionMessages(): AgentMessage[] {
-    try {
-      return SessionManager.open(this.params.sessionFile).buildSessionContext().messages;
-    } catch {
-      return [];
-    }
+  private async readMirroredSessionMessages(): Promise<AgentMessage[]> {
+    return (await readCodexMirroredSessionHistoryMessages(this.params.sessionFile)) ?? [];
   }
 
   private createAssistantMessage(text: string): AssistantMessage {
@@ -819,6 +853,29 @@ function readNumber(record: JsonObject, key: string): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function readBoolean(record: JsonObject, key: string): boolean | undefined {
+  const value = record[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readBooleanAlias(record: JsonObject, keys: readonly string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = readBoolean(record, key);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function readCodexErrorNotificationMessage(record: JsonObject): string | undefined {
+  const error = record.error;
+  if (isJsonObject(error)) {
+    return readString(error, "message") ?? readString(error, "error");
+  }
+  return readString(record, "message");
+}
+
 function readHookOutputEntries(
   value: JsonValue | undefined,
 ): Array<{ kind?: string; text: string }> {
@@ -859,17 +916,24 @@ function readNumberAlias(record: JsonObject, keys: readonly string[]): number | 
 }
 
 function normalizeCodexTokenUsage(record: JsonObject): ReturnType<typeof normalizeUsage> {
+  const promptTotalInput = readNumberAlias(record, CODEX_PROMPT_TOTAL_INPUT_KEYS);
+  const cacheRead = readNumberAlias(record, [
+    "cachedInputTokens",
+    "cached_input_tokens",
+    "cacheRead",
+    "cache_read",
+    "cache_read_input_tokens",
+    "cached_tokens",
+  ]);
+  const input =
+    promptTotalInput !== undefined && cacheRead !== undefined
+      ? Math.max(0, promptTotalInput - cacheRead)
+      : (promptTotalInput ?? readNumber(record, "input"));
+
   return normalizeUsage({
-    input: readNumberAlias(record, ["inputTokens", "input_tokens", "input", "promptTokens"]),
+    input,
     output: readNumberAlias(record, ["outputTokens", "output_tokens", "output"]),
-    cacheRead: readNumberAlias(record, [
-      "cachedInputTokens",
-      "cached_input_tokens",
-      "cacheRead",
-      "cache_read",
-      "cache_read_input_tokens",
-      "cached_tokens",
-    ]),
+    cacheRead,
     cacheWrite: readNumberAlias(record, [
       "cacheWrite",
       "cache_write",

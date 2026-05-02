@@ -13,6 +13,9 @@ import {
 
 type NodeBridgeSession = {
   id: string;
+  url?: string;
+  mode?: string;
+  outputCommand: { command: string; args: string[] };
   input?: ChildProcess;
   output?: ChildProcess;
   chunks: Buffer[];
@@ -21,17 +24,11 @@ type NodeBridgeSession = {
   createdAt: string;
   lastInputAt?: string;
   lastOutputAt?: string;
+  lastClearAt?: string;
   lastInputBytes: number;
   lastOutputBytes: number;
-};
-
-type BrowserStatus = {
-  inCall?: boolean;
-  micMuted?: boolean;
-  browserUrl?: string;
-  browserTitle?: string;
-  status?: string;
-  notes?: string[];
+  closedAt?: string;
+  clearCount: number;
 };
 
 const sessions = new Map<string, NodeBridgeSession>();
@@ -60,10 +57,6 @@ function readNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function readBoolean(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
-}
-
 function runCommandWithTimeout(argv: string[], timeoutMs: number) {
   const [command, ...args] = argv;
   if (!command) {
@@ -78,163 +71,6 @@ function runCommandWithTimeout(argv: string[], timeoutMs: number) {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? (result.error ? formatErrorMessage(result.error) : ""),
   };
-}
-
-function runAppleScript(script: string, timeoutMs: number) {
-  return runCommandWithTimeout(["/usr/bin/osascript", "-e", script], timeoutMs);
-}
-
-function normalizeAppleScriptString(value: string): string {
-  return JSON.stringify(value);
-}
-
-function activeMeetTabStatus(timeoutMs: number): BrowserStatus {
-  const script = `
-tell application "Google Chrome"
-  repeat with w in windows
-    repeat with t in tabs of w
-      set tabUrl to URL of t
-      if tabUrl starts with "https://meet.google.com/" then
-        set active tab index of w to index of t
-        set index of w to 1
-        set tabTitle to title of t
-        return tabUrl & linefeed & tabTitle
-      end if
-    end repeat
-  end repeat
-end tell`;
-  const result = runAppleScript(script, timeoutMs);
-  if (result.code !== 0) {
-    return {
-      inCall: false,
-      status: "browser-unavailable",
-      notes: [result.stderr || result.stdout || "Google Chrome tab status unavailable"],
-    };
-  }
-  const [browserUrl = "", browserTitle = ""] = result.stdout.split(/\r?\n/u);
-  return {
-    inCall: Boolean(browserUrl.trim()) && !/Meet$/u.test(browserTitle.trim()),
-    browserUrl: browserUrl.trim() || undefined,
-    browserTitle: browserTitle.trim() || undefined,
-    status: "ok",
-  };
-}
-
-function activateExistingMeetTab(url: string, timeoutMs: number): boolean {
-  const script = `
-set targetUrl to ${normalizeAppleScriptString(url)}
-tell application "Google Chrome"
-  repeat with w in windows
-    repeat with t in tabs of w
-      if URL of t is targetUrl then
-        set active tab index of w to index of t
-        set index of w to 1
-        activate
-        return "found"
-      end if
-    end repeat
-  end repeat
-end tell
-return "missing"`;
-  const result = runAppleScript(script, timeoutMs);
-  return result.code === 0 && result.stdout.trim() === "found";
-}
-
-function executeMeetTabScript(url: string, javascript: string, timeoutMs: number) {
-  const script = `
-set targetUrl to ${normalizeAppleScriptString(url)}
-set source to ${normalizeAppleScriptString(javascript)}
-tell application "Google Chrome"
-  repeat with w in windows
-    repeat with t in tabs of w
-      if URL of t starts with targetUrl then
-        set active tab index of w to index of t
-        set index of w to 1
-        return execute t javascript source
-      end if
-    end repeat
-  end repeat
-end tell
-return ""`;
-  return runAppleScript(script, timeoutMs);
-}
-
-function tryAutoJoinMeet(params: {
-  url: string;
-  guestName: string;
-  timeoutMs: number;
-}): BrowserStatus {
-  const js = `
-(() => {
-  const text = (node) => (node?.innerText || node?.textContent || "").trim();
-  const input = [...document.querySelectorAll('input')].find((el) =>
-    /your name/i.test(el.getAttribute('aria-label') || el.placeholder || '')
-  );
-  if (input && !input.value) {
-    input.focus();
-    input.value = ${JSON.stringify(params.guestName)};
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-  const buttons = [...document.querySelectorAll('button')];
-  const join = buttons.find((button) => /join now|ask to join/i.test(text(button)) && !button.disabled);
-  if (join) join.click();
-  const mic = buttons.find((button) => /turn off microphone|turn on microphone|microphone/i.test(button.getAttribute('aria-label') || text(button)));
-  return JSON.stringify({
-    clickedJoin: Boolean(join),
-    inCall: buttons.some((button) => /leave call/i.test(button.getAttribute('aria-label') || text(button))),
-    micMuted: mic ? /turn on microphone/i.test(mic.getAttribute('aria-label') || text(mic)) : undefined,
-    title: document.title,
-    url: location.href
-  });
-})();`;
-  const result = executeMeetTabScript(params.url, js, Math.min(params.timeoutMs, 5_000));
-  if (result.code !== 0) {
-    return {
-      ...activeMeetTabStatus(Math.min(params.timeoutMs, 2_000)),
-      notes: [
-        "Chrome JavaScript automation is unavailable; enable Chrome > View > Developer > Allow JavaScript from Apple Events for guest auto-join.",
-        result.stderr || result.stdout || "unknown Apple Events failure",
-      ],
-    };
-  }
-  try {
-    const parsed = JSON.parse(result.stdout.trim()) as {
-      inCall?: boolean;
-      micMuted?: boolean;
-      url?: string;
-      title?: string;
-    };
-    return {
-      inCall: parsed.inCall,
-      micMuted: parsed.micMuted,
-      browserUrl: parsed.url,
-      browserTitle: parsed.title,
-      status: "ok",
-    };
-  } catch {
-    return activeMeetTabStatus(Math.min(params.timeoutMs, 2_000));
-  }
-}
-
-async function waitForInCall(params: {
-  url: string;
-  guestName: string;
-  autoJoin: boolean;
-  timeoutMs: number;
-}): Promise<BrowserStatus> {
-  const deadline = Date.now() + Math.max(0, params.timeoutMs);
-  let status: BrowserStatus = activeMeetTabStatus(2_000);
-  while (Date.now() <= deadline) {
-    status = params.autoJoin
-      ? tryAutoJoinMeet({ url: params.url, guestName: params.guestName, timeoutMs: 5_000 })
-      : activeMeetTabStatus(2_000);
-    if (status.inCall === true) {
-      return status;
-    }
-    await sleep(750);
-  }
-  return status;
 }
 
 function assertBlackHoleAvailable(timeoutMs: number) {
@@ -267,33 +103,57 @@ function wake(session: NodeBridgeSession) {
 }
 
 function stopSession(session: NodeBridgeSession) {
-  if (session.closed) {
-    return;
-  }
+  const wasClosed = session.closed;
   session.closed = true;
-  session.input?.kill("SIGTERM");
-  session.output?.kill("SIGTERM");
-  wake(session);
+  session.closedAt ??= new Date().toISOString();
+  terminateChild(session.input);
+  terminateChild(session.output);
+  if (!wasClosed) {
+    wake(session);
+  }
+}
+
+function attachOutputProcessHandlers(session: NodeBridgeSession, outputProcess: ChildProcess) {
+  outputProcess.on("exit", () => {
+    if (session.output === outputProcess) {
+      stopSession(session);
+    }
+  });
+  outputProcess.on("error", () => {
+    if (session.output === outputProcess) {
+      stopSession(session);
+    }
+  });
+}
+
+function startOutputProcess(command: { command: string; args: string[] }) {
+  return spawn(command.command, command.args, {
+    stdio: ["pipe", "ignore", "pipe"],
+  });
 }
 
 function startCommandPair(params: {
   inputCommand: string[];
   outputCommand: string[];
+  url?: string;
+  mode?: string;
 }): NodeBridgeSession {
   const input = splitCommand(params.inputCommand);
   const output = splitCommand(params.outputCommand);
   const session: NodeBridgeSession = {
     id: `meet_node_${randomUUID()}`,
+    url: params.url,
+    mode: params.mode,
+    outputCommand: output,
     chunks: [],
     waiters: [],
     closed: false,
     createdAt: new Date().toISOString(),
     lastInputBytes: 0,
     lastOutputBytes: 0,
+    clearCount: 0,
   };
-  const outputProcess = spawn(output.command, output.args, {
-    stdio: ["pipe", "ignore", "pipe"],
-  });
+  const outputProcess = startOutputProcess(output);
   const inputProcess = spawn(input.command, input.args, {
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -310,11 +170,36 @@ function startCommandPair(params: {
     wake(session);
   });
   inputProcess.on("exit", () => stopSession(session));
-  outputProcess.on("exit", () => stopSession(session));
+  attachOutputProcessHandlers(session, outputProcess);
   inputProcess.on("error", () => stopSession(session));
-  outputProcess.on("error", () => stopSession(session));
   sessions.set(session.id, session);
   return session;
+}
+
+function terminateChild(child?: ChildProcess) {
+  if (!child) {
+    return;
+  }
+  let exited = child.exitCode !== null || child.signalCode !== null;
+  child.once?.("exit", () => {
+    exited = true;
+  });
+  try {
+    child.kill("SIGTERM");
+  } catch {
+    // Best-effort cleanup for node-host child processes.
+  }
+  const timer = setTimeout(() => {
+    if (exited) {
+      return;
+    }
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      // Process may have exited after the grace check.
+    }
+  }, 2_000);
+  timer.unref?.();
 }
 
 async function pullAudio(params: Record<string, unknown>) {
@@ -360,46 +245,71 @@ function pushAudio(params: Record<string, unknown>) {
   return { bridgeId, ok: true };
 }
 
+function clearAudio(params: Record<string, unknown>) {
+  const bridgeId = readString(params.bridgeId);
+  if (!bridgeId) {
+    throw new Error("bridgeId required");
+  }
+  const session = sessions.get(bridgeId);
+  if (!session || session.closed) {
+    throw new Error(`bridge is not open: ${bridgeId}`);
+  }
+  const previousOutput = session.output;
+  const outputProcess = startOutputProcess(session.outputCommand);
+  session.output = outputProcess;
+  attachOutputProcessHandlers(session, outputProcess);
+  session.clearCount += 1;
+  session.lastClearAt = new Date().toISOString();
+  terminateChild(previousOutput);
+  return { bridgeId, ok: true, clearCount: session.clearCount };
+}
+
 function startChrome(params: Record<string, unknown>) {
   const url = readString(params.url);
   if (!url) {
     throw new Error("url required");
   }
   const timeoutMs = readNumber(params.joinTimeoutMs, 30_000);
-  assertBlackHoleAvailable(Math.min(timeoutMs, 10_000));
-
-  const healthCommand = readStringArray(params.audioBridgeHealthCommand);
-  if (healthCommand) {
-    const health = runCommandWithTimeout(healthCommand, timeoutMs);
-    if (health.code !== 0) {
-      throw new Error(
-        `Chrome audio bridge health check failed: ${health.stderr || health.stdout || health.code}`,
-      );
-    }
-  }
+  const mode = readString(params.mode);
 
   let bridgeId: string | undefined;
   let audioBridge: { type: "external-command" | "node-command-pair" } | undefined;
-  const bridgeCommand = readStringArray(params.audioBridgeCommand);
-  if (bridgeCommand) {
-    const bridge = runCommandWithTimeout(bridgeCommand, timeoutMs);
-    if (bridge.code !== 0) {
-      throw new Error(
-        `failed to start Chrome audio bridge: ${bridge.stderr || bridge.stdout || bridge.code}`,
-      );
+  if (mode === "realtime") {
+    assertBlackHoleAvailable(Math.min(timeoutMs, 10_000));
+
+    const healthCommand = readStringArray(params.audioBridgeHealthCommand);
+    if (healthCommand) {
+      const health = runCommandWithTimeout(healthCommand, timeoutMs);
+      if (health.code !== 0) {
+        throw new Error(
+          `Chrome audio bridge health check failed: ${health.stderr || health.stdout || health.code}`,
+        );
+      }
     }
-    audioBridge = { type: "external-command" };
-  } else if (params.mode === "realtime") {
-    const session = startCommandPair({
-      inputCommand: readStringArray(params.audioInputCommand) ?? [
-        ...DEFAULT_GOOGLE_MEET_AUDIO_INPUT_COMMAND,
-      ],
-      outputCommand: readStringArray(params.audioOutputCommand) ?? [
-        ...DEFAULT_GOOGLE_MEET_AUDIO_OUTPUT_COMMAND,
-      ],
-    });
-    bridgeId = session.id;
-    audioBridge = { type: "node-command-pair" };
+
+    const bridgeCommand = readStringArray(params.audioBridgeCommand);
+    if (bridgeCommand) {
+      const bridge = runCommandWithTimeout(bridgeCommand, timeoutMs);
+      if (bridge.code !== 0) {
+        throw new Error(
+          `failed to start Chrome audio bridge: ${bridge.stderr || bridge.stdout || bridge.code}`,
+        );
+      }
+      audioBridge = { type: "external-command" };
+    } else {
+      const session = startCommandPair({
+        inputCommand: readStringArray(params.audioInputCommand) ?? [
+          ...DEFAULT_GOOGLE_MEET_AUDIO_INPUT_COMMAND,
+        ],
+        outputCommand: readStringArray(params.audioOutputCommand) ?? [
+          ...DEFAULT_GOOGLE_MEET_AUDIO_OUTPUT_COMMAND,
+        ],
+        url,
+        mode,
+      });
+      bridgeId = session.id;
+      audioBridge = { type: "node-command-pair" };
+    }
   }
 
   if (params.launch !== false) {
@@ -408,44 +318,42 @@ function startChrome(params: Record<string, unknown>) {
     if (browserProfile) {
       argv.push("--args", `--profile-directory=${browserProfile}`);
     }
-    const reused = readBoolean(params.reuseExistingTab, true)
-      ? activateExistingMeetTab(url, Math.min(timeoutMs, 5_000))
-      : false;
-    if (!reused) {
-      argv.push(url);
-      const result = runCommandWithTimeout(argv, timeoutMs);
-      if (result.code !== 0) {
-        if (bridgeId) {
-          const session = sessions.get(bridgeId);
-          if (session) {
-            stopSession(session);
-          }
+    argv.push(url);
+    const result = runCommandWithTimeout(argv, timeoutMs);
+    if (result.code !== 0) {
+      if (bridgeId) {
+        const session = sessions.get(bridgeId);
+        if (session) {
+          stopSession(session);
         }
-        throw new Error(
-          `failed to launch Chrome for Meet: ${result.stderr || result.stdout || result.code}`,
-        );
       }
+      throw new Error(
+        `failed to launch Chrome for Meet: ${result.stderr || result.stdout || result.code}`,
+      );
     }
   }
 
-  const waitForInCallMs = readNumber(params.waitForInCallMs, 20_000);
-  return Promise.resolve(
-    params.launch !== false && waitForInCallMs > 0
-      ? waitForInCall({
-          url,
-          guestName: readString(params.guestName) ?? "OpenClaw Agent",
-          autoJoin: readBoolean(params.autoJoin, true),
-          timeoutMs: waitForInCallMs,
-        })
-      : activeMeetTabStatus(2_000),
-  ).then((browser) => ({ launched: params.launch !== false, bridgeId, audioBridge, browser }));
+  return {
+    launched: params.launch !== false,
+    bridgeId,
+    audioBridge,
+    browser:
+      params.launch !== false
+        ? {
+            status: "chrome-opened",
+            browserUrl: url,
+            notes: [
+              "Browser page control is handled by OpenClaw browser automation when using chrome-node.",
+            ],
+          }
+        : undefined,
+  };
 }
 
 function bridgeStatus(params: Record<string, unknown>) {
   const bridgeId = readString(params.bridgeId);
   const session = bridgeId ? sessions.get(bridgeId) : undefined;
   return {
-    browser: activeMeetTabStatus(2_000),
     bridge: session
       ? {
           bridgeId,
@@ -453,13 +361,86 @@ function bridgeStatus(params: Record<string, unknown>) {
           createdAt: session.createdAt,
           lastInputAt: session.lastInputAt,
           lastOutputAt: session.lastOutputAt,
+          lastClearAt: session.lastClearAt,
           lastInputBytes: session.lastInputBytes,
           lastOutputBytes: session.lastOutputBytes,
+          clearCount: session.clearCount,
+          queuedInputChunks: session.chunks.length,
         }
       : bridgeId
         ? { bridgeId, closed: true }
         : undefined,
   };
+}
+
+function normalizeMeetKey(value?: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const url = new URL(value);
+    if (url.hostname.toLowerCase() !== "meet.google.com") {
+      return value;
+    }
+    const match = /^\/([a-z]{3}-[a-z]{4}-[a-z]{3})(?:$|[/?#])/i.exec(url.pathname);
+    return match?.[1]?.toLowerCase() ?? value;
+  } catch {
+    return value;
+  }
+}
+
+function summarizeSession(session: NodeBridgeSession) {
+  return {
+    bridgeId: session.id,
+    url: session.url,
+    mode: session.mode,
+    closed: session.closed,
+    createdAt: session.createdAt,
+    closedAt: session.closedAt,
+    lastInputAt: session.lastInputAt,
+    lastOutputAt: session.lastOutputAt,
+    lastInputBytes: session.lastInputBytes,
+    lastOutputBytes: session.lastOutputBytes,
+  };
+}
+
+function listSessions(params: Record<string, unknown>) {
+  const urlKey = normalizeMeetKey(readString(params.url));
+  const mode = readString(params.mode);
+  const bridges = [...sessions.values()]
+    .filter((session) => !session.closed)
+    .filter((session) => !urlKey || normalizeMeetKey(session.url) === urlKey)
+    .filter((session) => !mode || session.mode === mode)
+    .map(summarizeSession);
+  return { bridges };
+}
+
+function stopSessionsByUrl(params: Record<string, unknown>) {
+  const urlKey = normalizeMeetKey(readString(params.url));
+  if (!urlKey) {
+    throw new Error("url required");
+  }
+  const mode = readString(params.mode);
+  const exceptBridgeId = readString(params.exceptBridgeId);
+  let stopped = 0;
+  for (const [bridgeId, session] of sessions) {
+    if (exceptBridgeId && bridgeId === exceptBridgeId) {
+      continue;
+    }
+    if (normalizeMeetKey(session.url) !== urlKey) {
+      continue;
+    }
+    if (mode && session.mode !== mode) {
+      continue;
+    }
+    const wasClosed = session.closed;
+    stopSession(session);
+    sessions.delete(bridgeId);
+    if (!wasClosed) {
+      stopped += 1;
+    }
+  }
+  return { ok: true, stopped };
 }
 
 function stopChrome(params: Record<string, unknown>) {
@@ -487,16 +468,25 @@ export async function handleGoogleMeetNodeHostCommand(paramsJSON?: string | null
       result = { ok: true };
       break;
     case "start":
-      result = await startChrome(params);
+      result = startChrome(params);
       break;
     case "status":
       result = bridgeStatus(params);
+      break;
+    case "list":
+      result = listSessions(params);
+      break;
+    case "stopByUrl":
+      result = stopSessionsByUrl(params);
       break;
     case "pullAudio":
       result = await pullAudio(params);
       break;
     case "pushAudio":
       result = pushAudio(params);
+      break;
+    case "clearAudio":
+      result = clearAudio(params);
       break;
     case "stop":
       result = stopChrome(params);

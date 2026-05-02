@@ -7,6 +7,7 @@ import { loadCronStore } from "../store.js";
 import type { CronJob } from "../types.js";
 import { run, start, stop, update } from "./ops.js";
 import { createCronServiceState } from "./state.js";
+import { runMissedJobs } from "./timer.js";
 
 const { logger, makeStorePath } = setupCronServiceSuite({
   prefix: "cron-service-ops-seam",
@@ -128,7 +129,7 @@ function createMissedIsolatedJob(now: number): CronJob {
 }
 
 describe("cron service ops seam coverage", () => {
-  it("start clears stale running markers, replays interrupted recurring jobs, persists, and arms the timer (#60495)", async () => {
+  it("start marks interrupted running jobs failed, persists, and arms the timer", async () => {
     const { storePath } = await makeStorePath();
     const now = Date.parse("2026-03-23T12:00:00.000Z");
     const enqueueSystemEvent = vi.fn();
@@ -154,11 +155,10 @@ describe("cron service ops seam coverage", () => {
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ jobId: "startup-interrupted" }),
-      "cron: clearing stale running marker on startup",
+      "cron: marking interrupted running job failed on startup",
     );
-    // Interrupted recurring jobs are now replayed on first restart (#60495)
-    expect(enqueueSystemEvent).toHaveBeenCalled();
-    expect(requestHeartbeatNow).toHaveBeenCalled();
+    expect(enqueueSystemEvent).not.toHaveBeenCalled();
+    expect(requestHeartbeatNow).not.toHaveBeenCalled();
     expect(state.timer).not.toBeNull();
 
     const persisted = (await loadCronStore(storePath)) as {
@@ -167,7 +167,10 @@ describe("cron service ops seam coverage", () => {
     const job = persisted.jobs[0];
     expect(job).toBeDefined();
     expect(job?.state.runningAtMs).toBeUndefined();
-    expect(job?.state.lastStatus).toBe("ok");
+    expect(job?.state.lastStatus).toBe("error");
+    expect(job?.state.lastRunStatus).toBe("error");
+    expect(job?.state.lastRunAtMs).toBe(now - 30 * 60_000);
+    expect(job?.state.lastError).toBe("cron: job interrupted by gateway restart");
     expect((job?.state.nextRunAtMs ?? 0) > now).toBe(true);
 
     const delays = timeoutSpy.mock.calls
@@ -324,25 +327,26 @@ describe("cron service ops seam coverage", () => {
     const now = Date.parse("2026-03-23T12:00:00.000Z");
     const restoreStateDir = withStateDirForStorePath(storePath);
 
-    await writeCronStoreSnapshot({
-      storePath,
-      jobs: [createMissedIsolatedJob(now)],
-    });
+    try {
+      await writeCronStoreSnapshot({
+        storePath,
+        jobs: [createMissedIsolatedJob(now)],
+      });
 
-    const state = createTimedOutIsolatedCronState({
-      storePath,
-      now,
-    });
+      const state = createTimedOutIsolatedCronState({
+        storePath,
+        now,
+      });
 
-    await start(state);
+      await runMissedJobs(state);
 
-    expect(findTaskByRunId(`cron:startup-timeout:${now}`)).toMatchObject({
-      runtime: "cron",
-      status: "timed_out",
-      sourceId: "startup-timeout",
-    });
-
-    restoreStateDir();
-    stop(state);
+      expect(findTaskByRunId(`cron:startup-timeout:${now}`)).toMatchObject({
+        runtime: "cron",
+        status: "timed_out",
+        sourceId: "startup-timeout",
+      });
+    } finally {
+      restoreStateDir();
+    }
   });
 });

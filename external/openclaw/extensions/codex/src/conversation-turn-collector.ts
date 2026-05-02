@@ -4,10 +4,6 @@ import {
   type JsonObject,
 } from "./app-server/protocol.js";
 
-export type CodexConversationTurnCollector = ReturnType<
-  typeof createCodexConversationTurnCollector
->;
-
 export function createCodexConversationTurnCollector(threadId: string) {
   let turnId: string | undefined;
   let completed = false;
@@ -142,7 +138,7 @@ function isNotificationForTurn(
     return directTurnId === turnId;
   }
   const turn = isJsonObject(params.turn) ? params.turn : undefined;
-  return !turn || readString(turn, "id") === turnId;
+  return readString(turn, "id") === turnId;
 }
 
 function readRecord(value: unknown): Record<string, unknown> | undefined {

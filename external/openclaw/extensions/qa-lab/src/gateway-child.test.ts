@@ -85,8 +85,10 @@ describe("buildQaRuntimeEnv", () => {
     });
 
     expect(env.OPENCLAW_TEST_FAST).toBe("1");
+    expect(env.OPENCLAW_QA_PARENT_PID).toBe(String(process.pid));
     expect(env.OPENCLAW_QA_ALLOW_LOCAL_IMAGE_PROVIDER).toBe("1");
     expect(env.OPENCLAW_ALLOW_SLOW_REPLY_TESTS).toBe("1");
+    expect(env.OPENCLAW_SKIP_STARTUP_MODEL_PREWARM).toBe("1");
     expect(env.OPENCLAW_BUNDLED_PLUGINS_DIR).toBe("/tmp/openclaw-qa/bundled-plugins");
     expect(env.OPENCLAW_COMPATIBILITY_HOST_VERSION).toBe("2026.4.8");
   });
@@ -326,6 +328,49 @@ describe("buildQaRuntimeEnv", () => {
     );
     expect(__testing.isRetryableGatewayCallError("service restart in progress")).toBe(true);
     expect(__testing.isRetryableGatewayCallError("permission denied")).toBe(false);
+  });
+
+  it("waits for a fresh in-process restart boundary after the current log offset", async () => {
+    let logs = "old restart mode: in-process restart\n";
+    const offset = logs.length;
+    const wait = __testing.waitForQaGatewayRestartBoundary({
+      logs: () => logs,
+      offset,
+      pollMs: 1,
+      timeoutMs: 100,
+    });
+
+    logs += "signal SIGUSR1 received\nrestart mode: in-process restart\n";
+
+    await expect(wait).resolves.toBeUndefined();
+  });
+
+  it("keeps restart offsets stable after stderr output", async () => {
+    const output = __testing.createQaGatewayChildLogCollector();
+    output.push(Buffer.from("gateway ready\n"));
+    output.push(Buffer.from("stderr warning\n"));
+    const offset = output.text().length;
+    const wait = __testing.waitForQaGatewayRestartBoundary({
+      logs: () => output.text(),
+      offset,
+      pollMs: 1,
+      timeoutMs: 100,
+    });
+
+    output.push(Buffer.from("signal SIGUSR1 received\nrestart mode: in-process restart\n"));
+
+    await expect(wait).resolves.toBeUndefined();
+  });
+
+  it("times out when a SIGUSR1 restart never reaches the boundary", async () => {
+    await expect(
+      __testing.waitForQaGatewayRestartBoundary({
+        logs: () => "signal SIGUSR1 received\n",
+        offset: 0,
+        pollMs: 1,
+        timeoutMs: 1,
+      }),
+    ).rejects.toThrow("qa gateway child did not reach restart boundary");
   });
 
   it("stages a live Anthropic setup-token profile for isolated QA workers", async () => {

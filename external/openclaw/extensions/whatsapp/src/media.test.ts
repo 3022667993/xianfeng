@@ -3,8 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
 import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/temp-path";
-import { captureEnv } from "openclaw/plugin-sdk/testing";
-import { mockPinnedHostnameResolution } from "openclaw/plugin-sdk/testing";
+import { captureEnv } from "openclaw/plugin-sdk/test-env";
+import { mockPinnedHostnameResolution } from "openclaw/plugin-sdk/test-env";
 import { optimizeImageToPng } from "openclaw/plugin-sdk/web-media";
 import sharp from "sharp";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -248,10 +248,12 @@ describe("web media loading", () => {
   });
 
   it("uses content-disposition filename when available", async () => {
+    const pdfBytes = Buffer.from("%PDF-1.4");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: true,
       body: true,
-      arrayBuffer: async () => Buffer.from("%PDF-1.4").buffer,
+      arrayBuffer: async () =>
+        pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength),
       headers: {
         get: (name: string) => {
           if (name === "content-disposition") {

@@ -16,7 +16,11 @@ export type ReplyPayload = {
   presentation?: MessagePresentation;
   /** Channel-agnostic delivery preferences, e.g. pin the sent message when supported. */
   delivery?: ReplyPayloadDelivery;
-  /** Internal legacy representation used by existing approval/reply helpers during migration. */
+  /**
+   * @deprecated Use presentation.
+   *
+   * Internal legacy representation used by existing approval/reply helpers during migration.
+   */
   interactive?: InteractiveReply;
   btw?: {
     question: string;
@@ -27,6 +31,11 @@ export type ReplyPayload = {
   replyToCurrent?: boolean;
   /** Send audio as voice message (bubble) instead of audio file. Defaults to false. */
   audioAsVoice?: boolean;
+  /**
+   * Text synthesized into an audio-only TTS payload. Exposed to hooks for
+   * archival/search use when no visible channel text is sent.
+   */
+  spokenText?: string;
   isError?: boolean;
   /** Marks this payload as a reasoning/thinking block. Channels that do not
    *  have a dedicated reasoning lane (e.g. WhatsApp, web) should suppress it. */
