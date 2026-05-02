@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 from pathlib import Path
 
@@ -34,16 +35,21 @@ def audit_manifest(path: Path) -> tuple[list[str], list[str]]:
         errors.append("background_agents must be ['dummy2', 'dummy3']")
 
     models = data.get("models")
-    if not isinstance(models, list) or len(models) != 6:
-        errors.append("exactly 6 models required")
+    if not isinstance(models, list) or len(models) < 2:
+        errors.append("at least 2 models required")
         return errors, warnings
     model_ids = [m.get("id") for m in models if isinstance(m, dict)]
-    if len(model_ids) != 6 or len(set(model_ids)) != 6:
-        errors.append("model ids must be 6 unique entries")
+    n = len(model_ids)
+    if len(set(model_ids)) != n:
+        errors.append("model ids must be unique")
 
     rounds = data.get("rounds")
-    if not isinstance(rounds, list) or len(rounds) != 10:
-        errors.append("exactly 10 rounds required")
+    expected_total_rounds = 2 * (n - 1) if n % 2 == 0 else 2 * n
+    expected_matches_per_round = n // 2
+    expected_total_matches = n * (n - 1)
+    expected_pairs = math.comb(n, 2)
+    if not isinstance(rounds, list) or len(rounds) != expected_total_rounds:
+        errors.append(f"exactly {expected_total_rounds} rounds required")
         return errors, warnings
 
     cycle1_order: list[str] = []
@@ -57,8 +63,8 @@ def audit_manifest(path: Path) -> tuple[list[str], list[str]]:
         round_idx = r.get("round_idx")
         cycle = r.get("cycle")
         matches = r.get("matches")
-        if not isinstance(matches, list) or len(matches) != 3:
-            errors.append(f"round_{round_idx}: exactly 3 matches required")
+        if not isinstance(matches, list) or len(matches) != expected_matches_per_round:
+            errors.append(f"round_{round_idx}: exactly {expected_matches_per_round} matches required")
             continue
 
         seen = []
@@ -100,14 +106,22 @@ def audit_manifest(path: Path) -> tuple[list[str], list[str]]:
                 errors.append(f"round_{round_idx}: invalid cycle {cycle}")
 
         if sorted(seen) != sorted(model_ids):
-            errors.append(f"round_{round_idx}: not a perfect matching")
+            if n % 2 == 0:
+                errors.append(f"round_{round_idx}: not a perfect matching")
+            else:
+                bye_agent = r.get("bye_agent")
+                if bye_agent not in model_ids:
+                    errors.append(f"round_{round_idx}: odd-N schedule requires valid bye_agent")
+                expected_seen = sorted([m for m in model_ids if m != bye_agent])
+                if sorted(seen) != expected_seen:
+                    errors.append(f"round_{round_idx}: odd-N near-perfect matching violated")
 
-    if total_matches != 30:
-        errors.append("exactly 30 total matches required")
+    if total_matches != expected_total_matches:
+        errors.append(f"exactly {expected_total_matches} total matches required")
 
     pairs = data.get("pairs")
-    if not isinstance(pairs, list) or len(pairs) != 15:
-        errors.append("exactly 15 canonical pairs required")
+    if not isinstance(pairs, list) or len(pairs) != expected_pairs:
+        errors.append(f"exactly {expected_pairs} canonical pairs required")
         return errors, warnings
 
     seen_pairs = set()
@@ -147,11 +161,11 @@ def audit_manifest(path: Path) -> tuple[list[str], list[str]]:
         if a1 is not None and a2 is not None and a1 != a2:
             errors.append(f"{pair_id}: applied_seed mismatch across legs")
 
-    if len(seen_pairs) != 15:
+    if len(seen_pairs) != expected_pairs:
         errors.append("canonical pair count mismatch")
 
-    if len(cycle1_order) != 15 or len(cycle2_order) != 15:
-        errors.append("each cycle must contain 15 matches")
+    if len(cycle1_order) != expected_pairs or len(cycle2_order) != expected_pairs:
+        errors.append(f"each cycle must contain {expected_pairs} matches")
     else:
         if set(cycle1_order) != seen_pairs:
             errors.append("cycle_1 must contain every canonical pair exactly once")
