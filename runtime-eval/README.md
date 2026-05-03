@@ -1,48 +1,83 @@
 # runtime-eval
 
-Current checkpoint (GitHub commit `159b4593`) is a **Pommerman + A00 smoke/artifact/reproducibility** slice.
+Checkpoint scope is **Pommerman + A00 only**.
 
 ## Scope
-- Implemented: Pommerman + A00 only.
-- Not implemented in this checkpoint: A01, A11, A10, Lux, Kore, Halite, Held-Out, or full formal 10-round execution.
+- Implemented and validated in this checkpoint:
+  - 2-leg Pommerman A00 smoke artifact
+  - Formal schedule dry-run + audit
+  - 6-model execution smoke (`1 round x 3 matches`)
+  - 10-round adaptive dry-run (`10 rounds x 3 matches`)
+  - OpenClaw model route validation
+  - Real OpenClaw-Minimal revision smokes:
+    - single-agent (`1 round`)
+    - all-agent (`1 round`, all 6 agents)
+- Not implemented here:
+  - A01, A11, A10
+  - Lux, Kore, Halite, Held-Out
+  - Full 10-round real OpenClaw adaptive tournament
 
-## Validated Components
-- A00 memory-minimal config.
-- 2-leg Pommerman smoke artifact and `pairing_manifest.json`.
-- Smoke seed provenance recording.
-- Formal 6-model schedule dry-run manifest/audit.
-- 6-model execution smoke (`1 round x 3 matches`).
-- DeepSeek/GLM 6-model roster: `configs/models/openclaw_relay_6model_deepseek_glm.yaml`.
-- Per-agent workspace layout for 6-model execution smoke.
+## Current Route-Valid 6-Agent Roster
+Config: `configs/models/openclaw_relay_6model_deepseek_glm.yaml`
+- `relay_bailian_deepseek_v4_flash` -> `relay/bailian/deepseek-v4-flash`
+- `relay_gemini_2_5_flash_thinking` -> `relay/gemini-2.5-flash-thinking`
+- `relay_deepseek_v3` -> `relay/deepseek-ai/DeepSeek-V3.2`
+- `relay_glm_4_7` -> `glm-4.7`
+- `relay_glm_4_6` -> `glm-4.6`
+- `relay_glm_5` -> `relay/glm-5`
 
-## Reproduce
+## Reproduction Commands
 ```bash
 python -m pytest tests -q
 
 bash scripts/run_pommerman_a00_artifact.sh
 
+python scripts/validate_openclaw_model_routes.py \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+
+python scripts/audit_openclaw_model_routes.py
+
 python scripts/audit_pommerman_formal_schedule.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 
-rm -rf logs/round_* \
-       workspace/codebases/pommerman_gptv16_a00_6model_execution_smoke \
-       workspace/submissions/pommerman_gptv16_a00_6model_execution_smoke \
-       workspace/posts/pommerman_gptv16_a00_6model_execution_smoke
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+
+python scripts/audit_pommerman_openclaw_revision_smoke.py
 
 python -m runner.main \
   --regime configs/regimes/A00.yaml \
-  --tournament configs/tournaments/pommerman_gptv16_a00_6model_execution_smoke.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke_all_agents.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 
-python scripts/audit_pommerman_6model_execution_smoke.py
+python scripts/audit_pommerman_openclaw_revision_smoke_all_agents.py
+
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_6model_adaptive_dryrun.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+
+python scripts/audit_pommerman_10round_adaptive_dryrun.py
 ```
 
-## Expected Signals
-- `pytest` passes.
-- `pairing_manifest_audit=PASS`.
-- `formal_schedule_audit=PASS`.
-- `execution_smoke_audit=PASS`.
-- DeepSeek/GLM roster has 6 unique agents.
-- No persistent `left/` or `right/` dirs for 6-model execution smoke workspaces.
+## Expected Success Signals
+- `pytest` passes
+- `pairing_manifest_audit=PASS`
+- `formal_schedule_audit=PASS`
+- `openclaw_model_route_audit=PASS`
+- `openclaw_revision_smoke_audit=PASS`
+- `openclaw_revision_smoke_all_agents_audit=PASS`
+- `adaptive_dryrun_audit=PASS`
 
-See detailed protocol notes: `docs/pommerman_a00_artifact_card.md`.
+## Known Warning
+- `requested_seed` with `seed_control_status=requested_but_not_applied` is acceptable for current smoke/adaptive layers.
+- This is a warning, not a failure.
+
+## Status Wording
+- **10-round adaptive dry-run has run.**
+- **1-round all-agent real OpenClaw-Minimal revision smoke has run.**
+- **Full 10-round real OpenClaw adaptive run remains future work.**
+
+Detailed protocol notes: `docs/pommerman_a00_artifact_card.md`.

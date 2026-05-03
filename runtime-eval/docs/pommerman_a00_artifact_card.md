@@ -1,96 +1,164 @@
 # Pommerman + A00 Artifact Card
 
 ## Checkpoint
-- Commit: `159b4593`
-- Repository scope in this card: `runtime-eval`
-- Status: smoke/artifact/reproducibility checkpoint
+- Scope: `runtime-eval` only
+- Experiment family: Pommerman + A00 only
+- Status: smoke/artifact/reproducibility checkpoint with validated route and revision smokes
 
 ## 1) Scope
-This checkpoint only covers Pommerman + A00.
-
 Included:
-- Pommerman + A00 smoke artifact paths
-- Formal 6-model schedule dry-run manifest/audit
-- 6-model execution smoke (`1 round x 3 matches`)
+- A00 artifact/smoke paths
+- Formal schedule dry-run + audit
+- Generic schedule builder/audit helpers
+- 6-model execution smoke
+- 10-round adaptive dry-run
+- OpenClaw route validation
+- Real OpenClaw-Minimal revision smokes (single-agent and all-agent, both 1-round)
 
-Explicitly not in scope:
+Not included:
 - A01, A11, A10
-- Lux, Kore, Halite
-- Held-Out evaluations
-- Full formal 10-round execution
+- Lux, Kore, Halite, Held-Out
 - Paired aggregate scorecards
+- Full 10-round real OpenClaw adaptive tournament execution
 
-## 2) Current Validated Components
-- A00 memory-minimal config: `configs/regimes/A00.yaml`
-- 2-leg Pommerman smoke artifact
-- `logs/pairing_manifest.json`
-- Seed provenance in smoke artifacts/manifests
-- Formal 6-model schedule dry-run
-- 6-model execution smoke (`1 round x 3 matches`)
-- DeepSeek/GLM roster config: `configs/models/openclaw_relay_6model_deepseek_glm.yaml`
-- Per-agent workspace persistence layout
+## 2) Current Completed Stages
+1. A00 artifact/smoke layer
+- 2-leg smoke artifact completed.
+- Raw per-match scorecards preserved.
+- `logs/pairing_manifest.json` generated and audited.
+- Seed provenance recorded.
+- `requested_but_not_applied` seed warnings are acceptable.
 
-DeepSeek/GLM roster in this checkpoint:
-- `relay_bailian_deepseek_v4_flash` -> `bailian/deepseek-v4-flash`
-- `relay_deepseek_v2_5` -> `deepseek-ai/DeepSeek-V2.5`
-- `relay_deepseek_v3` -> `deepseek-ai/DeepSeek-V3`
-- `relay_glm_4_5v` -> `glm-4.5v`
-- `relay_glm_4_6` -> `glm-4.6`
+2. Formal schedule dry-run
+- Two-cycle double round robin.
+- 6 agents, 10 rounds, 3 matches per round, 30 total matches.
+- Cycle mapping:
+  - cycle_1 rounds `1-5`
+  - cycle_2 rounds `6-10`
+- cycle_2 repeats cycle_1 pair order with seats swapped.
+- No paired aggregate scorecard.
+
+3. Generic scheduler
+- Supports 6/8/10/12/13 agents.
+- Even `N`: perfect matching each round.
+- Odd `N`: BYE scheduling.
+- BYE is schedule-only; BYE is not treated as an agent artifact.
+
+4. 6-model execution smoke
+- `1 round x 3 matches`.
+- Per-agent workspace persistence.
+- No persistent `left/right` state directories.
+
+5. 10-round adaptive dry-run
+- `10 rounds x 3 matches` (30 matches).
+- Low-cost dryrun/noop revision path.
+- Round-to-round propagation: `codebase_post_t -> codebase_play_{t+1}`.
+- This is not real OpenClaw revision execution.
+
+6. OpenClaw route validation
+- `scripts/validate_openclaw_model_routes.py`
+- `scripts/audit_openclaw_model_routes.py`
+- Confirms all six current `provider_model` refs are known routes.
+- Fallback to `relay/gpt-4.1` does not count as success.
+
+7. Real OpenClaw-Minimal revision smokes
+- Single-agent real revision smoke passes.
+- All-agent real revision smoke passes.
+- For all six agents in all-agent smoke:
+  - `revision_ok=true`
+  - `provider_route_status=matched`
+  - `fallback_used=false`
+- This remains a 1-round smoke, not the full 10-round real experiment.
+
+## 3) Current Route-Valid 6-Agent Roster
+Config:
+- `configs/models/openclaw_relay_6model_deepseek_glm.yaml`
+
+Agents:
+- `relay_bailian_deepseek_v4_flash` -> `relay/bailian/deepseek-v4-flash`
+- `relay_gemini_2_5_flash_thinking` -> `relay/gemini-2.5-flash-thinking`
+- `relay_deepseek_v3` -> `relay/deepseek-ai/DeepSeek-V3.2`
 - `relay_glm_4_7` -> `glm-4.7`
+- `relay_glm_4_6` -> `glm-4.6`
+- `relay_glm_5` -> `relay/glm-5`
 
-## 3) Important Semantics
-- `agent_id` is the persistent model identity.
-- `left/right` is only per-match seat assignment.
-- In 6-model execution smoke, persistent state is **per-agent**, not per `left/right`.
+## 4) Route Corrections (Historical Note)
+- `deepseek-ai/DeepSeek-V2.5` removed (not route-valid in installed OpenClaw catalog).
+- `deepseek-ai/DeepSeek-V3` replaced by `relay/deepseek-ai/DeepSeek-V3.2` (bare route failed real invocation).
+- `glm-4.5v` removed (real invocation failed due to provider schema/tool payload rejection).
+- `llama-3.1-70b-instruct` considered but not used (not found as a known route in installed catalog).
+
+## 5) Key Semantics
+- `agent_id` is persistent model identity.
+- `left/right` is match seat assignment only.
 - Background agents are fixed: `dummy2`, `dummy3`.
-- Raw per-match scorecards are preserved.
-- No paired aggregate scorecard is generated.
+- Raw scorecards are preserved.
 - Pair-level aggregation is post-analysis only.
-- Formal dry-run uses `planned_seed` with `seed_control_status=planned_not_executed`.
-- Executed smoke records `requested_seed`; when environment-level application cannot be proven, status may be `requested_but_not_applied`.
+- No paired aggregate scorecard is generated.
+- No persistent `left/right` workspace state in 6-model execution/revision smokes.
 
-## 4) Reproduction Commands
+## 6) Reproduction Commands
 ```bash
 python -m pytest tests -q
 
 bash scripts/run_pommerman_a00_artifact.sh
 
-python scripts/audit_pommerman_formal_schedule.py \
+python scripts/validate_openclaw_model_routes.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 
-rm -rf logs/round_* \
-       workspace/codebases/pommerman_gptv16_a00_6model_execution_smoke \
-       workspace/submissions/pommerman_gptv16_a00_6model_execution_smoke \
-       workspace/posts/pommerman_gptv16_a00_6model_execution_smoke
+python scripts/audit_openclaw_model_routes.py
 
 python -m runner.main \
   --regime configs/regimes/A00.yaml \
-  --tournament configs/tournaments/pommerman_gptv16_a00_6model_execution_smoke.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 
-python scripts/audit_pommerman_6model_execution_smoke.py
+python scripts/audit_pommerman_openclaw_revision_smoke.py
+
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke_all_agents.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+
+python scripts/audit_pommerman_openclaw_revision_smoke_all_agents.py
+
+python scripts/audit_pommerman_formal_schedule.py \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_6model_adaptive_dryrun.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+
+python scripts/audit_pommerman_10round_adaptive_dryrun.py
 ```
 
-## 5) Expected Success Signals
-- `pytest` passes.
-- `pairing_manifest_audit=PASS`.
-- `formal_schedule_audit=PASS`.
-- `execution_smoke_audit=PASS`.
-- DeepSeek/GLM roster has 6 unique agents.
-- No persistent `left/` or `right/` directories for 6-model execution smoke.
+## 7) Expected Success Signals
+- `pytest` passes
+- `pairing_manifest_audit=PASS`
+- `formal_schedule_audit=PASS`
+- `openclaw_model_route_audit=PASS`
+- `openclaw_revision_smoke_audit=PASS`
+- `openclaw_revision_smoke_all_agents_audit=PASS`
+- `adaptive_dryrun_audit=PASS`
 
-## 6) Output Artifacts
+## 8) Output Artifacts
 - `logs/pairing_manifest.json`
 - `logs/pommerman_formal_schedule_manifest.json`
 - `logs/round_1/round_manifest.json`
+- `logs/round_1/revision_manifest.json`
 - `logs/round_1/match_1/`
 - `logs/round_1/match_2/`
 - `logs/round_1/match_3/`
-- `workspace/codebases/<tournament>/<agent_id>/codebase_play_1/`
-- `workspace/submissions/<tournament>/<agent_id>/submission_1/`
-- `workspace/posts/<tournament>/<agent_id>/codebase_post_1/`
+- `workspace/codebases/<tournament>/<agent_id>/codebase_play_<round_idx>/`
+- `workspace/submissions/<tournament>/<agent_id>/submission_<round_idx>/`
+- `workspace/posts/<tournament>/<agent_id>/codebase_post_<round_idx>/`
 
-## 7) Known Warnings
-- `seed requested but not applied` is acceptable for current executed smoke.
-- Rationale: adapter records `requested_seed` but cannot prove environment-level seed application.
+## 9) Known Warnings
+- `requested_seed` with `seed_control_status=requested_but_not_applied` is acceptable for current smoke/adaptive layers because environment-level seed application is not yet proven.
 - This is a warning, not a failure.
+
+## 10) Strict Status Wording
+- 10-round adaptive dry-run has run.
+- 1-round all-agent real OpenClaw-Minimal revision smoke has run.
+- Full 10-round real OpenClaw adaptive run remains future work.
