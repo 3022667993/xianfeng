@@ -35,7 +35,11 @@ def _audit_a00() -> list[str]:
     return errs
 
 
-def audit_openclaw_revision_smoke(tournament_name: str) -> tuple[list[str], list[str]]:
+def audit_openclaw_revision_smoke(
+    tournament_name: str,
+    *,
+    require_all_agents: bool = False,
+) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
     rd = Path("logs/round_1")
@@ -91,9 +95,11 @@ def audit_openclaw_revision_smoke(tournament_name: str) -> tuple[list[str], list
         return errors, warnings
 
     attempted_ok = []
+    attempted_count = 0
     for a in agents:
         attempted = bool(a.get("revision_attempted"))
         if attempted:
+            attempted_count += 1
             if a.get("revision_executor") != "openclaw-minimal":
                 errors.append("attempted agent must use openclaw-minimal")
             if not a.get("openclaw_invoked"):
@@ -106,7 +112,12 @@ def audit_openclaw_revision_smoke(tournament_name: str) -> tuple[list[str], list
             if prs == "mismatch":
                 errors.append("attempted agent has provider route mismatch")
             elif prs == "unknown":
-                warnings.append(f"{a.get('agent_id')}: provider route unknown")
+                if require_all_agents:
+                    errors.append("attempted agent has provider route unknown")
+                else:
+                    warnings.append(f"{a.get('agent_id')}: provider route unknown")
+            elif prs != "matched":
+                errors.append(f"attempted agent has unsupported provider route status: {prs!r}")
             if a.get("revision_ok"):
                 attempted_ok.append(a)
         else:
@@ -119,6 +130,24 @@ def audit_openclaw_revision_smoke(tournament_name: str) -> tuple[list[str], list
 
     if not attempted_ok:
         errors.append("at least one attempted openclaw-minimal revision must succeed")
+    if require_all_agents:
+        if attempted_count != len(agents):
+            errors.append("all agents must be revision_attempted=true")
+        for a in agents:
+            if not bool(a.get("revision_attempted")):
+                continue
+            if not bool(a.get("revision_ok")):
+                errors.append("all attempted agents must have revision_ok=true")
+            if a.get("provider_route_status") != "matched":
+                errors.append("all attempted agents must have provider_route_status=matched")
+            if a.get("revision_status") == "skipped_by_budget_guard":
+                errors.append("no agent may be skipped_by_budget_guard in all-agent mode")
+            if a.get("openclaw_invoked") is not True:
+                errors.append("all attempted agents must have openclaw_invoked=true")
+            if a.get("fallback_used") is not False:
+                errors.append("all attempted agents must have fallback_used=false")
+            if a.get("revision_executor") in {"dryrun-noop", "rule-minimal"}:
+                errors.append("attempted agent cannot use dryrun-noop/rule-minimal")
 
     for root in ["codebases", "submissions", "posts"]:
         troot = Path("workspace") / root / tournament_name

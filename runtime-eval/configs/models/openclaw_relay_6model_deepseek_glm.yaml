@@ -13,13 +13,13 @@ models:
 
   - id: relay_deepseek_v3
     agent_id: relay_deepseek_v3
-    provider_model: deepseek-ai/DeepSeek-V3
+    provider_model: relay/deepseek-ai/DeepSeek-V3.2
     executor: openclaw-minimal
     stratum: strong
 
-  - id: relay_glm_4_5v
-    agent_id: relay_glm_4_5v
-    provider_model: glm-4.5v
+  - id: relay_glm_5
+    agent_id: relay_glm_5
+    provider_model: relay/glm-5
     executor: openclaw-minimal
     stratum: light
 
