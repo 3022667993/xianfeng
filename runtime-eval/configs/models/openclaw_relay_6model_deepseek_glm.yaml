@@ -5,9 +5,9 @@ models:
     executor: openclaw-minimal
     stratum: light
 
-  - id: relay_deepseek_v2_5
-    agent_id: relay_deepseek_v2_5
-    provider_model: deepseek-ai/DeepSeek-V2.5
+  - id: relay_gemini_2_5_flash_thinking
+    agent_id: relay_gemini_2_5_flash_thinking
+    provider_model: relay/gemini-2.5-flash-thinking
     executor: openclaw-minimal
     stratum: mid
 

@@ -162,7 +162,7 @@ def test_deepseek_glm_roster_build_and_audit_passes(tmp_path):
     expected = sorted(
         [
             "relay_bailian_deepseek_v4_flash",
-            "relay_deepseek_v2_5",
+            "relay_gemini_2_5_flash_thinking",
             "relay_deepseek_v3",
             "relay_glm_4_5v",
             "relay_glm_4_6",
