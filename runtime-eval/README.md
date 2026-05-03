@@ -2,6 +2,9 @@
 
 Checkpoint scope is **Pommerman + A00 only**.
 
+## Checkpoint
+- Latest verified code checkpoint includes commit: `bb050e14` (Add two-round OpenClaw adaptive smoke).
+
 ## Scope
 - Implemented and validated in this checkpoint:
   - 2-leg Pommerman A00 smoke artifact
@@ -12,6 +15,7 @@ Checkpoint scope is **Pommerman + A00 only**.
   - Real OpenClaw-Minimal revision smokes:
     - single-agent (`1 round`)
     - all-agent (`1 round`, all 6 agents)
+  - 2-round real OpenClaw adaptive smoke (`2 rounds x 3 matches`)
 - Not implemented here:
   - A01, A11, A10
   - Lux, Kore, Halite, Held-Out
@@ -34,7 +38,6 @@ bash scripts/run_pommerman_a00_artifact.sh
 
 python scripts/validate_openclaw_model_routes.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
-
 python scripts/audit_openclaw_model_routes.py
 
 python scripts/audit_pommerman_formal_schedule.py \
@@ -44,21 +47,24 @@ python -m runner.main \
   --regime configs/regimes/A00.yaml \
   --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
-
 python scripts/audit_pommerman_openclaw_revision_smoke.py
 
 python -m runner.main \
   --regime configs/regimes/A00.yaml \
   --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke_all_agents.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
-
 python scripts/audit_pommerman_openclaw_revision_smoke_all_agents.py
+
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_adaptive_2round_smoke.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+python scripts/audit_pommerman_openclaw_adaptive_2round_smoke.py
 
 python -m runner.main \
   --regime configs/regimes/A00.yaml \
   --tournament configs/tournaments/pommerman_gptv16_a00_6model_adaptive_dryrun.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
-
 python scripts/audit_pommerman_10round_adaptive_dryrun.py
 ```
 
@@ -69,6 +75,7 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - `openclaw_model_route_audit=PASS`
 - `openclaw_revision_smoke_audit=PASS`
 - `openclaw_revision_smoke_all_agents_audit=PASS`
+- `openclaw_adaptive_2round_smoke_audit=PASS`
 - `adaptive_dryrun_audit=PASS`
 
 ## Known Warning
@@ -76,8 +83,8 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - This is a warning, not a failure.
 
 ## Status Wording
+- **2-round real OpenClaw adaptive smoke has run.**
 - **10-round adaptive dry-run has run.**
-- **1-round all-agent real OpenClaw-Minimal revision smoke has run.**
 - **Full 10-round real OpenClaw adaptive run remains future work.**
 
 Detailed protocol notes: `docs/pommerman_a00_artifact_card.md`.

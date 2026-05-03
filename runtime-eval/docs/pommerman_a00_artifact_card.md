@@ -3,7 +3,8 @@
 ## Checkpoint
 - Scope: `runtime-eval` only
 - Experiment family: Pommerman + A00 only
-- Status: smoke/artifact/reproducibility checkpoint with validated route and revision smokes
+- Latest verified code checkpoint includes: `bb050e14` (Add two-round OpenClaw adaptive smoke)
+- Status: smoke/artifact/reproducibility checkpoint with validated route, revision, and adaptive smokes
 
 ## 1) Scope
 Included:
@@ -14,6 +15,7 @@ Included:
 - 10-round adaptive dry-run
 - OpenClaw route validation
 - Real OpenClaw-Minimal revision smokes (single-agent and all-agent, both 1-round)
+- 2-round real OpenClaw adaptive smoke
 
 Not included:
 - A01, A11, A10
@@ -70,6 +72,23 @@ Not included:
   - `fallback_used=false`
 - This remains a 1-round smoke, not the full 10-round real experiment.
 
+8. 2-round real OpenClaw adaptive smoke
+- Config:
+  - `configs/tournaments/pommerman_gptv16_a00_openclaw_adaptive_2round_smoke.yaml`
+- Audit:
+  - `scripts/audit_pommerman_openclaw_adaptive_2round_smoke.py`
+- Execution structure:
+  - round 1: 3 raw matches
+  - round 1 post-match: all 6 agents get real OpenClaw-Minimal revision
+  - round 2: 3 raw matches using propagated `codebase_play_2`
+- Verification:
+  - all 6 revision entries have `revision_ok=true`
+  - all 6 have `provider_route_status=matched`
+  - `fallback_used=false` for all agents
+  - `logs/round_2/propagation_manifest.json` records `codebase_post_1 -> codebase_play_2` for every agent
+  - `propagation_ok=true`, `source_revision_ok=true`, `source_provider_route_status=matched`
+- This remains a smoke, not the full 10-round real OpenClaw experiment.
+
 ## 3) Current Route-Valid 6-Agent Roster
 Config:
 - `configs/models/openclaw_relay_6model_deepseek_glm.yaml`
@@ -95,7 +114,7 @@ Agents:
 - Raw scorecards are preserved.
 - Pair-level aggregation is post-analysis only.
 - No paired aggregate scorecard is generated.
-- No persistent `left/right` workspace state in 6-model execution/revision smokes.
+- No persistent `left/right` workspace state in execution/revision/adaptive smokes.
 
 ## 6) Reproduction Commands
 ```bash
@@ -105,31 +124,33 @@ bash scripts/run_pommerman_a00_artifact.sh
 
 python scripts/validate_openclaw_model_routes.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
-
 python scripts/audit_openclaw_model_routes.py
-
-python -m runner.main \
-  --regime configs/regimes/A00.yaml \
-  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke.yaml \
-  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
-
-python scripts/audit_pommerman_openclaw_revision_smoke.py
-
-python -m runner.main \
-  --regime configs/regimes/A00.yaml \
-  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke_all_agents.yaml \
-  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
-
-python scripts/audit_pommerman_openclaw_revision_smoke_all_agents.py
 
 python scripts/audit_pommerman_formal_schedule.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 
 python -m runner.main \
   --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+python scripts/audit_pommerman_openclaw_revision_smoke.py
+
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_revision_smoke_all_agents.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+python scripts/audit_pommerman_openclaw_revision_smoke_all_agents.py
+
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_adaptive_2round_smoke.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+python scripts/audit_pommerman_openclaw_adaptive_2round_smoke.py
+
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
   --tournament configs/tournaments/pommerman_gptv16_a00_6model_adaptive_dryrun.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
-
 python scripts/audit_pommerman_10round_adaptive_dryrun.py
 ```
 
@@ -140,6 +161,7 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - `openclaw_model_route_audit=PASS`
 - `openclaw_revision_smoke_audit=PASS`
 - `openclaw_revision_smoke_all_agents_audit=PASS`
+- `openclaw_adaptive_2round_smoke_audit=PASS`
 - `adaptive_dryrun_audit=PASS`
 
 ## 8) Output Artifacts
@@ -147,18 +169,22 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - `logs/pommerman_formal_schedule_manifest.json`
 - `logs/round_1/round_manifest.json`
 - `logs/round_1/revision_manifest.json`
-- `logs/round_1/match_1/`
-- `logs/round_1/match_2/`
-- `logs/round_1/match_3/`
-- `workspace/codebases/<tournament>/<agent_id>/codebase_play_<round_idx>/`
-- `workspace/submissions/<tournament>/<agent_id>/submission_<round_idx>/`
-- `workspace/posts/<tournament>/<agent_id>/codebase_post_<round_idx>/`
+- `logs/round_2/round_manifest.json`
+- `logs/round_2/propagation_manifest.json`
+- `logs/round_1/match_1/`, `logs/round_1/match_2/`, `logs/round_1/match_3/`
+- `logs/round_2/match_1/`, `logs/round_2/match_2/`, `logs/round_2/match_3/`
+- `workspace/codebases/<tournament>/<agent_id>/codebase_play_1/`
+- `workspace/submissions/<tournament>/<agent_id>/submission_1/`
+- `workspace/posts/<tournament>/<agent_id>/codebase_post_1/`
+- `workspace/codebases/<tournament>/<agent_id>/codebase_play_2/`
+- `workspace/submissions/<tournament>/<agent_id>/submission_2/`
+- `workspace/posts/<tournament>/<agent_id>/codebase_post_2/`
 
 ## 9) Known Warnings
 - `requested_seed` with `seed_control_status=requested_but_not_applied` is acceptable for current smoke/adaptive layers because environment-level seed application is not yet proven.
 - This is a warning, not a failure.
 
 ## 10) Strict Status Wording
+- 2-round real OpenClaw adaptive smoke has run.
 - 10-round adaptive dry-run has run.
-- 1-round all-agent real OpenClaw-Minimal revision smoke has run.
 - Full 10-round real OpenClaw adaptive run remains future work.
