@@ -99,7 +99,7 @@ Agents:
 - `relay_deepseek_v3` -> `relay/deepseek-ai/DeepSeek-V3.2`
 - `relay_glm_4_7` -> `glm-4.7`
 - `relay_glm_4_6` -> `glm-4.6`
-- `relay_glm_5` -> `relay/glm-5`
+- `relay_glm_4_6v` -> `relay/glm-4.6v`
 
 ## 4) Route Corrections (Historical Note)
 - `deepseek-ai/DeepSeek-V2.5` removed (not route-valid in installed OpenClaw catalog).

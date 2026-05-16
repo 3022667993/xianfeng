@@ -13,6 +13,7 @@ from runner.core.config import load_yaml, require_keys
 from runner.core.fsops import copy_tree
 from runner.core.revision import apply_minimal_revision, apply_noop_revision, write_diff_patch
 from runner.core.schedule import build_two_cycle_schedule
+from runner.core.pommerman_feedback import write_feedback_artifact_mirrors, write_process_feedback
 
 
 REQUIRED_DIRS = [
@@ -317,6 +318,7 @@ def _run_execution_smoke_tournament(
         }
 
         write_json(match_dir / "metadata.json", metadata_payload)
+        write_process_feedback(match_dir, round_idx=1, match_idx=match_slot)
 
         round_manifest_matches.append(
             {
@@ -496,6 +498,7 @@ def _run_adaptive_dryrun_tournament(
                 "result": match_result["result"],
             }
             write_json(match_dir / "metadata.json", metadata_payload)
+            write_process_feedback(match_dir, round_idx=round_idx, match_idx=match_idx)
 
             round_manifest_matches.append(
                 {
@@ -754,6 +757,7 @@ def _run_openclaw_revision_smoke_tournament(
             "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
         }
         write_json(match_dir / "metadata.json", md_payload)
+        write_process_feedback(match_dir, round_idx=1, match_idx=match_slot)
         round_manifest_matches.append(
             {
                 "match_id": f"match_{match_slot}",
@@ -929,6 +933,7 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
             "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
         }
         write_json(match_dir / "metadata.json", md_payload)
+        write_process_feedback(match_dir, round_idx=1, match_idx=match_idx)
         round1_matches.append(
             {
                 "match_id": f"match_{match_idx}",
@@ -1040,6 +1045,10 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
         },
     )
     write_json(Path("logs/round_1/revision_manifest.json"), {"agents": [round1_revision_manifest[a] for a in agent_ids]})
+    for match in round1["matches"]:
+        m_idx = int(match["match_idx"])
+        mdir = Path("logs/round_1") / f"match_{m_idx}"
+        write_feedback_artifact_mirrors(mdir, tournament_name, 1)
     failed_selected = [x for x in round1_revision_manifest.values() if not x["revision_ok"]]
     if failed_selected:
         reasons = "; ".join(f"{x['agent_id']}:{x['failure_reason']}" for x in failed_selected)
@@ -1160,6 +1169,7 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
             "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
         }
         write_json(match_dir / "metadata.json", md_payload)
+        write_process_feedback(match_dir, round_idx=2, match_idx=match_idx)
         round2_matches.append(
             {
                 "match_id": f"match_{match_idx}",

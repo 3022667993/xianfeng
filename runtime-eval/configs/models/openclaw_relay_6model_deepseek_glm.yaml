@@ -17,9 +17,9 @@ models:
     executor: openclaw-minimal
     stratum: strong
 
-  - id: relay_glm_5
-    agent_id: relay_glm_5
-    provider_model: relay/glm-5
+  - id: relay_glm_4_6v
+    agent_id: relay_glm_4_6v
+    provider_model: relay/glm-4.6v
     executor: openclaw-minimal
     stratum: light
 

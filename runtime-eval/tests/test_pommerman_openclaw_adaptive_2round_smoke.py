@@ -5,6 +5,7 @@ from runner.core.config import load_yaml
 from scripts.audit_pommerman_openclaw_adaptive_2round_smoke import (
     audit_openclaw_adaptive_2round_smoke,
 )
+from scripts.audit_pommerman_process_feedback import audit_process_feedback
 
 
 def test_openclaw_adaptive_2round_config_loads():
@@ -193,3 +194,65 @@ def test_adaptive_2round_audit_fails_if_play2_under_left_right(tmp_path, monkeyp
     bad.mkdir(parents=True, exist_ok=True)
     errors, _warnings = audit_openclaw_adaptive_2round_smoke(tournament)
     assert any("persistent left/" in e for e in errors)
+
+
+def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tournament = _mk_fixture(tmp_path)
+    for rd in [tmp_path / "logs" / "round_1", tmp_path / "logs" / "round_2"]:
+        for match_dir in sorted(p for p in rd.glob("match_*") if p.is_dir()):
+            pair = [("a1", "a2"), ("a3", "a4"), ("a5", "a6")][int(match_dir.name.split("_")[-1]) - 1]
+            left_id, right_id = pair
+            (match_dir / "metadata.json").write_text(
+                json.dumps({"left_agent_id": left_id, "right_agent_id": right_id}),
+                encoding="utf-8",
+            )
+            summary = {
+                "schema_version": "pommerman_process_feedback_v1",
+                "round_idx": int(rd.name.split("_")[-1]),
+                "match_idx": int(match_dir.name.split("_")[-1]),
+                "match_id": match_dir.name,
+                "pair_id": f"{left_id}__vs__{right_id}",
+                "left_agent_id": left_id,
+                "right_agent_id": right_id,
+                "background_agents": ["dummy2", "dummy3"],
+                "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
+                "seed": None,
+                "requested_seed": None,
+                "applied_seed": None,
+                "seed_control_status": "requested_but_not_applied",
+                "legs": [],
+                "seat_swap_summary": {},
+                "agent_summaries": {},
+            }
+            (match_dir / "trajectory_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+            for agent in [left_id, right_id]:
+                payload = {
+                    "schema_version": "pommerman_agent_feedback_v1",
+                    "agent_id": agent,
+                    "source_files": {
+                        "metadata": str(match_dir / "metadata.json"),
+                        "scorecard": str(match_dir / "scorecard.json"),
+                        "arena_result_match_a": str(match_dir / "arena_result_match_a.json"),
+                        "arena_result_match_b": str(match_dir / "arena_result_match_b.json"),
+                        "trajectory_summary": str(match_dir / "trajectory_summary.json"),
+                    },
+                    "result_summary": {"wins": 0, "losses": 0, "draws": 0, "legs": []},
+                    "diagnostics": {
+                        "seat_sensitivity_observed": False,
+                        "dummy_interference_observed": False,
+                        "both_tested_agents_lost_any_leg": False,
+                        "short_game_loss_observed": False,
+                        "long_game_win_observed": False,
+                    },
+                    "factual_observations": [],
+                    "next_round_hints": [],
+                    "limitations": [
+                        "process_feedback_v1 is derived from result-level arena artifacts only",
+                        "tick-level actions, board states, bomb events, and death causes are not yet recorded",
+                    ],
+                }
+                (match_dir / f"agent_feedback_{agent}.json").write_text(json.dumps(payload), encoding="utf-8")
+                (match_dir / f"agent_feedback_{agent}.md").write_text("feedback", encoding="utf-8")
+    errors, _warnings = audit_process_feedback()
+    assert errors == []
