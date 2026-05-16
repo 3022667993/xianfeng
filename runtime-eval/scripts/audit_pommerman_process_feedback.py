@@ -70,10 +70,38 @@ def audit_process_feedback(logs_root: Path = Path("logs")) -> tuple[list[str], l
                     if not isinstance(p, str) or not Path(p).exists():
                         errors.append(f"{jf}: source file missing for {k}")
                 limitations = payload.get("limitations", [])
-                required1 = "process_feedback_v1 is derived from result-level arena artifacts only"
-                required2 = "tick-level actions, board states, bomb events, and death causes are not yet recorded"
-                if required1 not in limitations or required2 not in limitations:
-                    errors.append(f"{jf}: limitations must explicitly include no tick-level replay")
+                lim_text = "\n".join(limitations).lower() if isinstance(limitations, list) else ""
+                compact = payload.get("compact_trajectory_v2")
+                compact_present = isinstance(compact, dict)
+                mode_a_required = [
+                    "process_feedback_v1 is derived from result-level arena artifacts only",
+                    "tick-level actions, board states, bomb events, and death causes are not yet recorded",
+                ]
+                mode_b_required = [
+                    "process_feedback_v1 is derived from result-level arena artifacts and compact trajectory v2 when available",
+                    "compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
+                    "full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
+                ]
+                if compact_present:
+                    for req in mode_b_required:
+                        if req.lower() not in lim_text:
+                            errors.append(f"{jf}: compact-v2 limitation text missing: {req}")
+                else:
+                    for req in mode_a_required:
+                        if req.lower() not in lim_text:
+                            errors.append(f"{jf}: v1 limitation text missing: {req}")
+
+                md_path = match_dir / f"agent_feedback_{agent_id}.md"
+                if md_path.exists():
+                    md_lim_text = md_path.read_text(encoding="utf-8").lower()
+                    if compact_present:
+                        if "compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available" not in md_lim_text:
+                            errors.append(f"{md_path}: compact-v2 limitation text missing")
+                        if "tick-level actions, board states, bomb events, and death causes are not yet recorded" in md_lim_text:
+                            errors.append(f"{md_path}: old v1-only tick-level limitation must not appear in compact-v2 mode")
+                    else:
+                        if "tick-level actions, board states, bomb events, and death causes are not yet recorded" not in md_lim_text:
+                            errors.append(f"{md_path}: v1 limitation text missing")
                 as_text = json.dumps(payload, ensure_ascii=False).lower()
                 for token in UNSUPPORTED_TICK_CLAIMS:
                     if token in as_text:

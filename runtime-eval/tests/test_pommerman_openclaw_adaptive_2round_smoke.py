@@ -226,6 +226,40 @@ def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
                 "agent_summaries": {},
             }
             (match_dir / "trajectory_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+            compact_events = {
+                "schema_version": "pommerman_compact_trajectory_events_v2",
+                "legs": {
+                    "match_a": {
+                        "trajectory_path": str(match_dir / "trajectory_compact_match_a.jsonl"),
+                        "capture_status": "captured",
+                        "step_count": 1,
+                        "terminal_step": None,
+                        "winner_seats": None,
+                        "first_reward_change_step": None,
+                        "alive_change_steps": [],
+                        "final_reward": [0, 0, 0, 0],
+                        "capture_notes": [],
+                    },
+                    "match_b": {
+                        "trajectory_path": str(match_dir / "trajectory_compact_match_b.jsonl"),
+                        "capture_status": "captured",
+                        "step_count": 1,
+                        "terminal_step": None,
+                        "winner_seats": None,
+                        "first_reward_change_step": None,
+                        "alive_change_steps": [],
+                        "final_reward": [0, 0, 0, 0],
+                        "capture_notes": [],
+                    },
+                },
+                "agent_event_summaries": {},
+                "limitations": [
+                    "compact trajectory v2 does not store full board arrays",
+                    "compact trajectory v2 does not store full observations",
+                    "death causes, bomb ownership, and power-up pickup causes are only recorded if available from compact fields",
+                ],
+            }
+            (match_dir / "trajectory_events.json").write_text(json.dumps(compact_events), encoding="utf-8")
             for agent in [left_id, right_id]:
                 payload = {
                     "schema_version": "pommerman_agent_feedback_v1",
@@ -247,12 +281,32 @@ def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
                     },
                     "factual_observations": [],
                     "next_round_hints": [],
+                    "compact_trajectory_v2": {
+                        "events_path": str(match_dir / "trajectory_events.json"),
+                        "match_a": compact_events["legs"]["match_a"],
+                        "match_b": compact_events["legs"]["match_b"],
+                        "limitations": compact_events["limitations"],
+                    },
                     "limitations": [
-                        "process_feedback_v1 is derived from result-level arena artifacts only",
-                        "tick-level actions, board states, bomb events, and death causes are not yet recorded",
+                        "process_feedback_v1 is derived from result-level arena artifacts and compact trajectory v2 when available",
+                        "compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
+                        "full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
                     ],
                 }
                 (match_dir / f"agent_feedback_{agent}.json").write_text(json.dumps(payload), encoding="utf-8")
-                (match_dir / f"agent_feedback_{agent}.md").write_text("feedback", encoding="utf-8")
+                (match_dir / f"agent_feedback_{agent}.md").write_text(
+                    "\n".join(
+                        [
+                            "# Agent Feedback",
+                            "## Compact Trajectory v2",
+                            "- compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
+                            "## Limitations",
+                            "- process_feedback_v1 is derived from result-level arena artifacts and compact trajectory v2 when available",
+                            "- compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
+                            "- full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
     errors, _warnings = audit_process_feedback()
     assert errors == []
