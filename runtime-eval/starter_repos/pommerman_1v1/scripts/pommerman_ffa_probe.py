@@ -4,10 +4,17 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 import pommerman
 from pommerman import agents
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from seed_control import apply_env_seed, apply_pre_env_seed
 
 
 def to_jsonable(x):
@@ -117,6 +124,7 @@ def main():
     parser.add_argument("--left-submission", required=True)
     parser.add_argument("--right-submission", required=True)
     parser.add_argument("--compact-out", default=None)
+    parser.add_argument("--requested-seed", type=int, default=None)
     args = parser.parse_args()
 
     out_path = Path(args.out).resolve()
@@ -129,6 +137,9 @@ def main():
     right_main = Path(args.right_submission).resolve()
 
     env_id = "PommeFFACompetition-v0"
+
+    requested_seed = args.requested_seed
+    pre_env_seed_provenance = apply_pre_env_seed(requested_seed)
 
     left_agent = load_agent_from_submission(left_main, "left_submission_main")
     right_agent = load_agent_from_submission(right_main, "right_submission_main")
@@ -143,7 +154,20 @@ def main():
     env = pommerman.make(env_id, agent_list)
 
     try:
+        seed_provenance = apply_env_seed(env, requested_seed, prior_provenance=pre_env_seed_provenance)
         state = env.reset()
+        applied_seed = seed_provenance.get("applied_seed")
+        seed_control_status = str(seed_provenance.get("seed_control_status") or "requested_but_not_applied")
+        seed_control_error = seed_provenance.get("seed_control_error")
+        methods_attempted = seed_provenance.get("seed_control_methods_attempted", [])
+        method_applied = seed_provenance.get("seed_control_method_applied")
+        env_seed_return = seed_provenance.get("seed_control_env_seed_return")
+        print(
+            f"[seed-control] status={seed_control_status} requested={requested_seed} "
+            f"applied={applied_seed} method={method_applied} env_seed_return={env_seed_return} "
+            f"error={seed_control_error}",
+            file=sys.stderr,
+        )
         done = False
         step_count = 0
         reward = None
@@ -213,6 +237,14 @@ def main():
             "left_right_winner": lr_winner,
             "left_submission": str(left_main),
             "right_submission": str(right_main),
+            "requested_seed": seed_provenance.get("requested_seed"),
+            "applied_seed": applied_seed,
+            "seed": seed_provenance.get("seed"),
+            "seed_control_status": seed_control_status,
+            "seed_control_error": seed_control_error,
+            "seed_control_methods_attempted": methods_attempted if isinstance(methods_attempted, list) else [],
+            "seed_control_method_applied": method_applied,
+            "seed_control_env_seed_return": env_seed_return,
         }
 
         out_path.write_text(

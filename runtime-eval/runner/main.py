@@ -51,19 +51,150 @@ def _smoke_requested_seed(tournament: dict) -> int:
     return int(seed)
 
 
-def _write_round_seed_provenance(round_dir: Path, requested_seed: int, applied_seed: int | None) -> None:
-    seed_control_status = "applied" if applied_seed is not None else "requested_but_not_applied"
-    seed = applied_seed if applied_seed is not None else None
+def _write_round_seed_provenance(
+    round_dir: Path,
+    requested_seed: int,
+    applied_seed: int | None,
+    *,
+    seed_control_status: str | None = None,
+    seed_control_error: str | None = None,
+    seed_control_methods_attempted: list[str] | None = None,
+    seed_control_method_applied: str | None = None,
+    seed_control_env_seed_return: object | None = None,
+) -> None:
+    existing_payloads: list[dict[str, object]] = []
     for name in ("arena_result_match_a.json", "arena_result_match_b.json", "scorecard.json"):
+        path = round_dir / name
+        if path.exists():
+            existing_payloads.append(json.loads(path.read_text(encoding="utf-8")))
+
+    if seed_control_status is None:
+        if requested_seed is None:
+            if isinstance(applied_seed, int):
+                seed_control_status = "applied"
+            elif existing_payloads:
+                observed = [
+                    p.get("seed_control_status")
+                    for p in existing_payloads
+                    if isinstance(p.get("seed_control_status"), str)
+                ]
+                seed_control_status = observed[0] if observed else "not_requested"
+            else:
+                seed_control_status = "not_requested"
+        else:
+            if isinstance(applied_seed, int):
+                seed_control_status = "applied"
+            elif existing_payloads:
+                observed = [
+                    p.get("seed_control_status")
+                    for p in existing_payloads
+                    if isinstance(p.get("seed_control_status"), str)
+                ]
+                if "applied" in observed:
+                    seed_control_status = "applied"
+                else:
+                    preferred = [s for s in observed if s in {"requested_but_not_applied", "unsupported_by_environment"}]
+                    seed_control_status = preferred[0] if preferred else "requested_but_not_applied"
+            else:
+                seed_control_status = "requested_but_not_applied"
+
+    if applied_seed is None:
+        for payload in existing_payloads:
+            candidate = payload.get("applied_seed")
+            if isinstance(candidate, int):
+                applied_seed = candidate
+                break
+    if seed_control_status == "applied" and applied_seed != requested_seed:
+        seed_control_status = "requested_but_not_applied"
+        applied_seed = None
+    if seed_control_status in {"requested_but_not_applied", "unsupported_by_environment", "not_requested"}:
+        applied_seed = None
+    seed = applied_seed if seed_control_status == "applied" else None
+    for name in (
+        "arena_result_match_a.json",
+        "arena_result_match_b.json",
+        "scorecard.json",
+        "metadata.json",
+        "round_manifest.json",
+        "trajectory_summary.json",
+        "trajectory_events.json",
+    ):
         path = round_dir / name
         if not path.exists():
             continue
         payload = json.loads(path.read_text(encoding="utf-8"))
+        existing_status = payload.get("seed_control_status")
+        existing_error = payload.get("seed_control_error")
+        existing_attempted = payload.get("seed_control_methods_attempted")
+        existing_method_applied = payload.get("seed_control_method_applied")
+        existing_env_seed_return = payload.get("seed_control_env_seed_return")
         payload["requested_seed"] = requested_seed
         payload["applied_seed"] = applied_seed
         payload["seed"] = seed
         payload["seed_control_status"] = seed_control_status
+        payload["seed_control_error"] = (
+            seed_control_error
+            if seed_control_error is not None
+            else (existing_error if isinstance(existing_error, str) else None)
+        )
+        if isinstance(seed_control_methods_attempted, list):
+            payload["seed_control_methods_attempted"] = seed_control_methods_attempted
+        elif isinstance(existing_attempted, list):
+            payload["seed_control_methods_attempted"] = existing_attempted
+        else:
+            payload["seed_control_methods_attempted"] = []
+        payload["seed_control_method_applied"] = (
+            seed_control_method_applied
+            if seed_control_method_applied is not None
+            else (existing_method_applied if isinstance(existing_method_applied, str) else None)
+        )
+        payload["seed_control_env_seed_return"] = (
+            seed_control_env_seed_return
+            if seed_control_env_seed_return is not None
+            else existing_env_seed_return
+        )
+        if payload["seed_control_status"] in {"requested_but_not_applied", "unsupported_by_environment"}:
+            if not isinstance(payload.get("seed_control_error"), str) or not str(payload["seed_control_error"]).strip():
+                payload["seed_control_error"] = "requested seed could not be applied by environment seed/reset APIs"
+            attempted = payload.get("seed_control_methods_attempted")
+            if not isinstance(attempted, list) or not attempted:
+                payload["seed_control_methods_attempted"] = ["env.reset(seed=...)", "env.seed(...)"]
+        if seed_control_status is None and isinstance(existing_status, str):
+            payload["seed_control_status"] = existing_status
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _read_seed_provenance_from_match_dir(
+    match_dir: Path,
+) -> tuple[int | None, str, str | None, list[str], str | None, object | None]:
+    scorecard = match_dir / "scorecard.json"
+    if not scorecard.exists():
+        return None, "requested_but_not_applied", "scorecard_missing_for_seed_provenance", [], None, None
+    try:
+        payload = json.loads(scorecard.read_text(encoding="utf-8"))
+    except Exception:
+        return None, "requested_but_not_applied", "scorecard_seed_parse_failed", [], None, None
+    applied_seed = payload.get("applied_seed")
+    status = payload.get("seed_control_status", "requested_but_not_applied")
+    err = payload.get("seed_control_error")
+    attempted = payload.get("seed_control_methods_attempted")
+    method = payload.get("seed_control_method_applied")
+    env_seed_return = payload.get("seed_control_env_seed_return")
+    methods = attempted if isinstance(attempted, list) else []
+    error = err if isinstance(err, str) else None
+    if status in {"requested_but_not_applied", "unsupported_by_environment"}:
+        if not methods:
+            methods = ["env.reset(seed=...)", "env.seed(...)"]
+        if not isinstance(error, str) or not error.strip():
+            error = "requested seed could not be applied by environment seed/reset APIs"
+    return (
+        applied_seed,
+        status,
+        error,
+        methods,
+        method if isinstance(method, str) else None,
+        env_seed_return,
+    )
 
 
 def _execution_smoke_base_seed(tournament: dict) -> int:
@@ -262,6 +393,14 @@ def _run_execution_smoke_tournament(
         pair_id = "__vs__".join(sorted([left_id, right_id]))
         requested_seed = _execution_smoke_pair_seed(pair_id, base_seed)
         _write_round_seed_provenance(match_dir, requested_seed=requested_seed, applied_seed=None)
+        (
+            applied_seed,
+            seed_control_status,
+            seed_control_error,
+            seed_methods_attempted,
+            seed_method_applied,
+            seed_env_seed_return,
+        ) = _read_seed_provenance_from_match_dir(match_dir)
 
         metadata_payload = {
             "round_idx": 1,
@@ -288,9 +427,13 @@ def _run_execution_smoke_tournament(
             },
             "background_agents": ["dummy2", "dummy3"],
             "requested_seed": requested_seed,
-            "applied_seed": None,
-            "seed": None,
-            "seed_control_status": "requested_but_not_applied",
+            "applied_seed": applied_seed,
+            "seed": applied_seed if seed_control_status == "applied" else None,
+            "seed_control_status": seed_control_status,
+            "seed_control_error": seed_control_error,
+            "seed_control_methods_attempted": seed_methods_attempted,
+            "seed_control_method_applied": seed_method_applied,
+            "seed_control_env_seed_return": seed_env_seed_return,
             "starter_repo": str(starter_repo),
             "validate_submission_ok": valid,
             "validate_submission_msg": validate_msg,
@@ -329,9 +472,13 @@ def _run_execution_smoke_tournament(
                 "left_submission_path": str(left_submission),
                 "right_submission_path": str(right_submission),
                 "requested_seed": requested_seed,
-                "applied_seed": None,
-                "seed": None,
-                "seed_control_status": "requested_but_not_applied",
+                "applied_seed": applied_seed,
+                "seed": applied_seed if seed_control_status == "applied" else None,
+                "seed_control_status": seed_control_status,
+                "seed_control_error": seed_control_error,
+                "seed_control_methods_attempted": seed_methods_attempted,
+                "seed_control_method_applied": seed_method_applied,
+                "seed_control_env_seed_return": seed_env_seed_return,
                 "seat_assignment": {
                     "left": left_agent_id,
                     "right": right_agent_id,
@@ -445,6 +592,14 @@ def _run_adaptive_dryrun_tournament(
             pair_id = str(match["pair_id"])
             requested_seed = _stable_pair_seed(pair_id, base_seed)
             _write_round_seed_provenance(match_dir, requested_seed=requested_seed, applied_seed=None)
+            (
+                applied_seed,
+                seed_control_status,
+                seed_control_error,
+                seed_methods_attempted,
+                seed_method_applied,
+                seed_env_seed_return,
+            ) = _read_seed_provenance_from_match_dir(match_dir)
 
             metadata_payload = {
                 "round_idx": round_idx,
@@ -470,9 +625,13 @@ def _run_adaptive_dryrun_tournament(
                 },
                 "background_agents": ["dummy2", "dummy3"],
                 "requested_seed": requested_seed,
-                "applied_seed": None,
-                "seed": None,
-                "seed_control_status": "requested_but_not_applied",
+                "applied_seed": applied_seed,
+                "seed": applied_seed if seed_control_status == "applied" else None,
+                "seed_control_status": seed_control_status,
+                "seed_control_error": seed_control_error,
+                "seed_control_methods_attempted": seed_methods_attempted,
+                "seed_control_method_applied": seed_method_applied,
+                "seed_control_env_seed_return": seed_env_seed_return,
                 "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
                 "left_source_path": str(left_source),
                 "right_source_path": str(right_source),
@@ -512,9 +671,13 @@ def _run_adaptive_dryrun_tournament(
                     "seat_assignment": metadata_payload["seat_assignment"],
                     "background_agents": ["dummy2", "dummy3"],
                     "requested_seed": requested_seed,
-                    "applied_seed": None,
-                    "seed": None,
-                    "seed_control_status": "requested_but_not_applied",
+                    "applied_seed": applied_seed,
+                    "seed": applied_seed if seed_control_status == "applied" else None,
+                    "seed_control_status": seed_control_status,
+                    "seed_control_error": seed_control_error,
+                    "seed_control_methods_attempted": seed_methods_attempted,
+                    "seed_control_method_applied": seed_method_applied,
+                    "seed_control_env_seed_return": seed_env_seed_return,
                     "metadata_path": str(match_dir / "metadata.json"),
                     "scorecard_path": str(match_dir / "scorecard.json"),
                     "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
@@ -732,6 +895,14 @@ def _run_openclaw_revision_smoke_tournament(
         pair_id = "__vs__".join(sorted([left_id, right_id]))
         requested_seed = _stable_pair_seed(pair_id, base_seed)
         _write_round_seed_provenance(match_dir, requested_seed=requested_seed, applied_seed=None)
+        (
+            applied_seed,
+            seed_control_status,
+            seed_control_error,
+            seed_methods_attempted,
+            seed_method_applied,
+            seed_env_seed_return,
+        ) = _read_seed_provenance_from_match_dir(match_dir)
         md_payload = {
             "round_idx": 1,
             "match_idx": match_slot,
@@ -747,9 +918,13 @@ def _run_openclaw_revision_smoke_tournament(
             "seat_assignment": {"left": left_agent_id, "right": right_agent_id, "background_agents": ["dummy2", "dummy3"]},
             "background_agents": ["dummy2", "dummy3"],
             "requested_seed": requested_seed,
-            "applied_seed": None,
-            "seed": None,
-            "seed_control_status": "requested_but_not_applied",
+            "applied_seed": applied_seed,
+            "seed": applied_seed if seed_control_status == "applied" else None,
+            "seed_control_status": seed_control_status,
+            "seed_control_error": seed_control_error,
+            "seed_control_methods_attempted": seed_methods_attempted,
+            "seed_control_method_applied": seed_method_applied,
+            "seed_control_env_seed_return": seed_env_seed_return,
             "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
             "metadata_path": str(match_dir / "metadata.json"),
             "scorecard_path": str(sc_path),
@@ -770,9 +945,13 @@ def _run_openclaw_revision_smoke_tournament(
                 "seat_assignment": md_payload["seat_assignment"],
                 "background_agents": ["dummy2", "dummy3"],
                 "requested_seed": requested_seed,
-                "applied_seed": None,
-                "seed": None,
-                "seed_control_status": "requested_but_not_applied",
+                "applied_seed": applied_seed,
+                "seed": applied_seed if seed_control_status == "applied" else None,
+                "seed_control_status": seed_control_status,
+                "seed_control_error": seed_control_error,
+                "seed_control_methods_attempted": seed_methods_attempted,
+                "seed_control_method_applied": seed_method_applied,
+                "seed_control_env_seed_return": seed_env_seed_return,
                 "metadata_path": str(match_dir / "metadata.json"),
                 "scorecard_path": str(sc_path),
                 "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
@@ -855,8 +1034,12 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
         copy_tree(starter_repo, right_codebase)
         left_export_ok, left_export_msg = adapter.export_submission(left_codebase, left_submission)
         right_export_ok, right_export_msg = adapter.export_submission(right_codebase, right_submission)
+        requested_seed = _stable_pair_seed(pair_id, base_seed)
+        match_cfg = dict(game_cfg)
+        match_cfg["requested_seed"] = requested_seed
+        match_cfg["seed"] = requested_seed
         if valid and left_export_ok and right_export_ok:
-            adapter.run_match(left_codebase, right_codebase, match_dir, game_cfg)
+            adapter.run_match(left_codebase, right_codebase, match_dir, match_cfg)
         else:
             write_json(
                 match_dir / "scorecard.json",
@@ -907,8 +1090,15 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
             )
             feedback_payload_written = True
 
-        requested_seed = _stable_pair_seed(pair_id, base_seed)
         _write_round_seed_provenance(match_dir, requested_seed=requested_seed, applied_seed=None)
+        (
+            applied_seed,
+            seed_control_status,
+            seed_control_error,
+            seed_methods_attempted,
+            seed_method_applied,
+            seed_env_seed_return,
+        ) = _read_seed_provenance_from_match_dir(match_dir)
         md_payload = {
             "round_idx": 1,
             "match_idx": match_idx,
@@ -923,9 +1113,13 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
             "seat_assignment": {"left": left_agent_id, "right": right_agent_id, "background_agents": ["dummy2", "dummy3"]},
             "background_agents": ["dummy2", "dummy3"],
             "requested_seed": requested_seed,
-            "applied_seed": None,
-            "seed": None,
-            "seed_control_status": "requested_but_not_applied",
+            "applied_seed": applied_seed,
+            "seed": applied_seed if seed_control_status == "applied" else None,
+            "seed_control_status": seed_control_status,
+            "seed_control_error": seed_control_error,
+            "seed_control_methods_attempted": seed_methods_attempted,
+            "seed_control_method_applied": seed_method_applied,
+            "seed_control_env_seed_return": seed_env_seed_return,
             "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
             "metadata_path": str(match_dir / "metadata.json"),
             "scorecard_path": str(sc_path),
@@ -946,9 +1140,13 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
                 "seat_assignment": md_payload["seat_assignment"],
                 "background_agents": ["dummy2", "dummy3"],
                 "requested_seed": requested_seed,
-                "applied_seed": None,
-                "seed": None,
-                "seed_control_status": "requested_but_not_applied",
+                "applied_seed": applied_seed,
+                "seed": applied_seed if seed_control_status == "applied" else None,
+                "seed_control_status": seed_control_status,
+                "seed_control_error": seed_control_error,
+                "seed_control_methods_attempted": seed_methods_attempted,
+                "seed_control_method_applied": seed_method_applied,
+                "seed_control_env_seed_return": seed_env_seed_return,
                 "metadata_path": str(match_dir / "metadata.json"),
                 "scorecard_path": str(sc_path),
                 "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
@@ -1100,8 +1298,12 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
 
         left_export_ok, left_export_msg = adapter.export_submission(left_codebase, left_submission)
         right_export_ok, right_export_msg = adapter.export_submission(right_codebase, right_submission)
+        requested_seed = _stable_pair_seed(pair_id, base_seed)
+        match_cfg = dict(game_cfg)
+        match_cfg["requested_seed"] = requested_seed
+        match_cfg["seed"] = requested_seed
         if valid and left_export_ok and right_export_ok:
-            adapter.run_match(left_codebase, right_codebase, match_dir, game_cfg)
+            adapter.run_match(left_codebase, right_codebase, match_dir, match_cfg)
         else:
             write_json(
                 match_dir / "scorecard.json",
@@ -1136,8 +1338,15 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
         apply_noop_revision(left_codebase, left_post, 2, "left")
         apply_noop_revision(right_codebase, right_post, 2, "right")
 
-        requested_seed = _stable_pair_seed(pair_id, base_seed)
         _write_round_seed_provenance(match_dir, requested_seed=requested_seed, applied_seed=None)
+        (
+            applied_seed,
+            seed_control_status,
+            seed_control_error,
+            seed_methods_attempted,
+            seed_method_applied,
+            seed_env_seed_return,
+        ) = _read_seed_provenance_from_match_dir(match_dir)
         sc_path = match_dir / "scorecard.json"
         md_payload = {
             "round_idx": 2,
@@ -1153,9 +1362,13 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
             "seat_assignment": {"left": left_agent_id, "right": right_agent_id, "background_agents": ["dummy2", "dummy3"]},
             "background_agents": ["dummy2", "dummy3"],
             "requested_seed": requested_seed,
-            "applied_seed": None,
-            "seed": None,
-            "seed_control_status": "requested_but_not_applied",
+            "applied_seed": applied_seed,
+            "seed": applied_seed if seed_control_status == "applied" else None,
+            "seed_control_status": seed_control_status,
+            "seed_control_error": seed_control_error,
+            "seed_control_methods_attempted": seed_methods_attempted,
+            "seed_control_method_applied": seed_method_applied,
+            "seed_control_env_seed_return": seed_env_seed_return,
             "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
             "left_submission_path": str(left_submission),
             "right_submission_path": str(right_submission),
@@ -1182,9 +1395,13 @@ def _run_openclaw_adaptive_2round_smoke_tournament(
                 "seat_assignment": md_payload["seat_assignment"],
                 "background_agents": ["dummy2", "dummy3"],
                 "requested_seed": requested_seed,
-                "applied_seed": None,
-                "seed": None,
-                "seed_control_status": "requested_but_not_applied",
+                "applied_seed": applied_seed,
+                "seed": applied_seed if seed_control_status == "applied" else None,
+                "seed_control_status": seed_control_status,
+                "seed_control_error": seed_control_error,
+                "seed_control_methods_attempted": seed_methods_attempted,
+                "seed_control_method_applied": seed_method_applied,
+                "seed_control_env_seed_return": seed_env_seed_return,
                 "metadata_path": str(match_dir / "metadata.json"),
                 "scorecard_path": str(sc_path),
                 "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),

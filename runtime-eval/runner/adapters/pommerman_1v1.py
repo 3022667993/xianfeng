@@ -127,6 +127,93 @@ class Pommerman1v1Adapter(BaseGameAdapter):
             "capture_notes": capture_notes,
         }
 
+    @staticmethod
+    def _normalize_seed_provenance(
+        *,
+        requested_seed: int | None,
+        applied_seed: int | None,
+        seed: int | None,
+        status: str | None,
+        error: str | None,
+        attempted: list[str] | None,
+        method_applied: str | None,
+        env_seed_return: Any,
+    ) -> tuple[int | None, int | None, int | None, str, str | None, list[str], str | None, Any]:
+        normalized_status = status if isinstance(status, str) else None
+        methods = attempted if isinstance(attempted, list) else []
+        err = error if isinstance(error, str) else None
+        method = method_applied if isinstance(method_applied, str) else None
+        app = applied_seed if isinstance(applied_seed, int) else None
+        req = requested_seed if isinstance(requested_seed, int) else None
+        seeded = seed if isinstance(seed, int) else None
+
+        if normalized_status not in {"applied", "requested_but_not_applied", "unsupported_by_environment", "not_requested"}:
+            if req is None:
+                normalized_status = "not_requested"
+            elif app == req:
+                normalized_status = "applied"
+            else:
+                normalized_status = "requested_but_not_applied"
+
+        if normalized_status == "applied":
+            if req is None or app != req:
+                normalized_status = "requested_but_not_applied" if req is not None else "not_requested"
+                app = None
+                seeded = None
+                method = None
+            else:
+                seeded = req
+                err = None
+                if not method:
+                    method = "unknown_env_seed_api"
+        elif normalized_status in {"requested_but_not_applied", "unsupported_by_environment"}:
+            app = None
+            seeded = None
+            method = None
+            env_seed_return = None
+            if not methods:
+                methods = ["env.reset(seed=...)", "env.seed(...)"]
+            if req is not None and (not isinstance(err, str) or not err.strip()):
+                err = "requested seed could not be applied by environment seed/reset APIs"
+        else:
+            app = None
+            seeded = None
+            err = None
+            env_seed_return = None
+            if req is None:
+                methods = []
+                method = None
+
+        return req, app, seeded, normalized_status, err, methods, method, env_seed_return
+
+    @staticmethod
+    def _seed_control_from_payload(
+        payload: dict[str, Any], requested_seed: int | None
+    ) -> tuple[int | None, int | None, int | None, str, str | None, list[str], str | None, Any]:
+        req_raw = payload.get("requested_seed")
+        req = req_raw if isinstance(req_raw, int) else requested_seed
+        return Pommerman1v1Adapter._normalize_seed_provenance(
+            requested_seed=req,
+            applied_seed=payload.get("applied_seed"),
+            seed=payload.get("seed"),
+            status=payload.get("seed_control_status"),
+            error=payload.get("seed_control_error"),
+            attempted=payload.get("seed_control_methods_attempted"),
+            method_applied=payload.get("seed_control_method_applied"),
+            env_seed_return=payload.get("seed_control_env_seed_return"),
+        )
+
+    @staticmethod
+    def _seed_status_for_match(req: int | None, app: int | None, payload: dict[str, Any]) -> str:
+        status = payload.get("seed_control_status")
+        if isinstance(status, str) and status in {"applied", "requested_but_not_applied", "unsupported_by_environment"}:
+            return status
+        if req is not None and app == req:
+            return "applied"
+        if req is not None:
+            return "requested_but_not_applied"
+        return "unsupported_by_environment"
+
     def run_match(
         self,
         left_codebase: Path,
@@ -136,6 +223,10 @@ class Pommerman1v1Adapter(BaseGameAdapter):
     ) -> dict[str, Any]:
         round_dir = round_dir.resolve()
         round_dir.mkdir(parents=True, exist_ok=True)
+
+        requested_seed = config.get("requested_seed")
+        if requested_seed is None and isinstance(config.get("seed"), int):
+            requested_seed = int(config["seed"])
 
         left_build = self._run_cmd(left_codebase, ["bash", "scripts/build.sh"])
         right_build = self._run_cmd(right_codebase, ["bash", "scripts/build.sh"])
@@ -188,8 +279,16 @@ class Pommerman1v1Adapter(BaseGameAdapter):
         paired_match_id = f"{round_dir.name}_seat_swap_pair_1"
         left_submission_main = (left_codebase / "submission" / "main.py").resolve()
         right_submission_main = (right_codebase / "submission" / "main.py").resolve()
+        fallback_seed_status = "requested_but_not_applied" if requested_seed is not None else "unsupported_by_environment"
 
         if left_ok and right_ok:
+            req_a = req_b = requested_seed
+            app_a = app_b = seed_a = seed_b = None
+            status_a = status_b = "requested_but_not_applied"
+            err_a = err_b = None
+            attempted_a = attempted_b = ["env.reset(seed=...)", "env.seed(...)"] if requested_seed is not None else []
+            method_a = method_b = None
+            env_seed_ret_a = env_seed_ret_b = None
             arena_run_match_a = self._run_cmd(
                 left_codebase,
                 [
@@ -199,6 +298,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     str(left_submission_main),
                     str(right_submission_main),
                     str(compact_match_a_path),
+                    str(requested_seed) if requested_seed is not None else "",
                 ],
             )
             arena_run_match_b = self._run_cmd(
@@ -210,6 +310,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     str(right_submission_main),
                     str(left_submission_main),
                     str(compact_match_b_path),
+                    str(requested_seed) if requested_seed is not None else "",
                 ],
             )
 
@@ -226,6 +327,12 @@ class Pommerman1v1Adapter(BaseGameAdapter):
             ):
                 arena_payload_match_a = json.loads(arena_result_match_a_path.read_text(encoding="utf-8"))
                 arena_payload_match_b = json.loads(arena_result_match_b_path.read_text(encoding="utf-8"))
+                req_a, app_a, seed_a, status_a, err_a, attempted_a, method_a, env_seed_ret_a = self._seed_control_from_payload(
+                    arena_payload_match_a, requested_seed
+                )
+                req_b, app_b, seed_b, status_b, err_b, attempted_b, method_b, env_seed_ret_b = self._seed_control_from_payload(
+                    arena_payload_match_b, requested_seed
+                )
                 arena_payload_match_a["paired_match_id"] = paired_match_id
                 arena_payload_match_a["match_label"] = "match_a"
                 arena_payload_match_a["left_submission"] = str(left_submission_main)
@@ -246,6 +353,18 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     "seat_2_submission": "dummy2",
                     "seat_3_submission": "dummy3",
                 }
+                for payload, req, app, seed, status, err, attempted, method, env_seed_ret in [
+                    (arena_payload_match_a, req_a, app_a, seed_a, status_a, err_a, attempted_a, method_a, env_seed_ret_a),
+                    (arena_payload_match_b, req_b, app_b, seed_b, status_b, err_b, attempted_b, method_b, env_seed_ret_b),
+                ]:
+                    payload["requested_seed"] = req
+                    payload["applied_seed"] = app
+                    payload["seed"] = seed
+                    payload["seed_control_status"] = status
+                    payload["seed_control_error"] = err
+                    payload["seed_control_methods_attempted"] = attempted
+                    payload["seed_control_method_applied"] = method
+                    payload["seed_control_env_seed_return"] = env_seed_ret
                 arena_result_match_a_path.write_text(
                     json.dumps(arena_payload_match_a, ensure_ascii=False, indent=2),
                     encoding="utf-8",
@@ -379,6 +498,22 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                         "compact trajectory v2 does not store full observations",
                         "death causes, bomb ownership, and power-up pickup causes are only recorded if available from compact fields",
                     ],
+                    "requested_seed": req_a,
+                    "applied_seed": app_a,
+                    "seed": seed_a,
+                    "seed_control_status": status_a,
+                    "seed_control_error": err_a,
+                    "seed_control_methods_attempted": attempted_a,
+                    "seed_control_method_applied": method_a,
+                    "seed_control_env_seed_return": env_seed_ret_a,
+                    "requested_seed_match_b": req_b,
+                    "applied_seed_match_b": app_b,
+                    "seed_match_b": seed_b,
+                    "seed_control_status_match_b": status_b,
+                    "seed_control_error_match_b": err_b,
+                    "seed_control_methods_attempted_match_b": attempted_b,
+                    "seed_control_method_applied_match_b": method_b,
+                    "seed_control_env_seed_return_match_b": env_seed_ret_b,
                 }
                 trajectory_events_path.write_text(
                     json.dumps(trajectory_events_payload, ensure_ascii=False, indent=2),
@@ -395,6 +530,14 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                         "seat_2_submission": "dummy2",
                         "seat_3_submission": "dummy3",
                     },
+                    "requested_seed": req_a,
+                    "applied_seed": app_a,
+                    "seed": seed_a,
+                    "seed_control_status": status_a,
+                    "seed_control_error": err_a,
+                    "seed_control_methods_attempted": attempted_a,
+                    "seed_control_method_applied": method_a,
+                    "seed_control_env_seed_return": env_seed_ret_a,
                 }
 
                 (round_dir / "scorecard.json").write_text(
@@ -414,6 +557,9 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     stderr_excerpt_parts.append(arena_run_match_b.stderr[:150])
                 stderr_excerpt = " | ".join(stderr_excerpt_parts)
             else:
+                env_seed_ret_a = env_seed_ret_b = None
+                if requested_seed is not None:
+                    err_a = err_b = "arena probe failed before seed application could be confirmed"
                 winner = "draw"
                 result = "arena_probe_failed"
                 runtime_ok = False
@@ -424,6 +570,17 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     stderr_excerpt_parts.append(arena_run_match_b.stderr[:150])
                 stderr_excerpt = " | ".join(stderr_excerpt_parts) if stderr_excerpt_parts else "arena probe failed"
         else:
+            req_a = req_b = requested_seed
+            app_a = app_b = seed_a = seed_b = None
+            status_a = status_b = "requested_but_not_applied" if requested_seed is not None else "not_requested"
+            err_a = err_b = (
+                "build or smoke failed before seed application could be attempted"
+                if requested_seed is not None
+                else None
+            )
+            attempted_a = attempted_b = ["env.reset(seed=...)", "env.seed(...)"] if requested_seed is not None else []
+            method_a = method_b = None
+            env_seed_ret_a = env_seed_ret_b = None
             winner = "draw"
             result = "build_or_smoke_failed"
             runtime_ok = False
@@ -446,5 +603,6 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                 "right_build_rc": right_build.returncode,
                 "left_smoke_rc": left_smoke.returncode,
                 "right_smoke_rc": right_smoke.returncode,
+                "seed_control_status": status_a if left_ok and right_ok else fallback_seed_status,
             },
         }

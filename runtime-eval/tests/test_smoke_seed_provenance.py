@@ -14,7 +14,14 @@ def test_write_round_seed_provenance_adds_fields_without_aggregation(tmp_path):
     for name in ["scorecard.json", "arena_result_match_a.json", "arena_result_match_b.json"]:
         (round_dir / name).write_text(json.dumps(base), encoding="utf-8")
 
-    _write_round_seed_provenance(round_dir, requested_seed=1001, applied_seed=None)
+    _write_round_seed_provenance(
+        round_dir,
+        requested_seed=1001,
+        applied_seed=None,
+        seed_control_error="seed_not_supported",
+        seed_control_methods_attempted=["env.reset(seed=...)", "env.seed(...)"],
+        seed_control_method_applied=None,
+    )
 
     scorecard = json.loads((round_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert scorecard["left_score"] == 1
@@ -24,3 +31,30 @@ def test_write_round_seed_provenance_adds_fields_without_aggregation(tmp_path):
     assert scorecard["applied_seed"] is None
     assert scorecard["seed"] is None
     assert scorecard["seed_control_status"] == "requested_but_not_applied"
+    assert scorecard["seed_control_error"] == "seed_not_supported"
+    assert scorecard["seed_control_methods_attempted"] == ["env.reset(seed=...)", "env.seed(...)"]
+    assert scorecard["seed_control_method_applied"] is None
+
+
+def test_write_round_seed_provenance_applied(tmp_path):
+    round_dir = tmp_path / "round_1"
+    round_dir.mkdir(parents=True)
+    base = {"left_score": 1, "right_score": -1, "left_right_winner": "left"}
+    for name in ["scorecard.json", "arena_result_match_a.json", "arena_result_match_b.json"]:
+        (round_dir / name).write_text(json.dumps(base), encoding="utf-8")
+
+    _write_round_seed_provenance(
+        round_dir,
+        requested_seed=1001,
+        applied_seed=1001,
+        seed_control_status="applied",
+        seed_control_methods_attempted=["env.reset(seed=...)"],
+        seed_control_method_applied="env.reset(seed=...)",
+    )
+    scorecard = json.loads((round_dir / "scorecard.json").read_text(encoding="utf-8"))
+    assert scorecard["requested_seed"] == 1001
+    assert scorecard["applied_seed"] == 1001
+    assert scorecard["seed"] == 1001
+    assert scorecard["seed_control_status"] == "applied"
+    assert scorecard["seed_control_methods_attempted"] == ["env.reset(seed=...)"]
+    assert scorecard["seed_control_method_applied"] == "env.reset(seed=...)"

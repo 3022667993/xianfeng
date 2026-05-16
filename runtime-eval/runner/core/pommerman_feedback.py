@@ -151,6 +151,16 @@ def build_trajectory_summary(match_dir: Path, round_idx: int, match_idx: int) ->
         "requested_seed": md.get("requested_seed", sc.get("requested_seed")),
         "applied_seed": md.get("applied_seed", sc.get("applied_seed")),
         "seed_control_status": md.get("seed_control_status", sc.get("seed_control_status", "unknown")),
+        "seed_control_error": md.get("seed_control_error", sc.get("seed_control_error")),
+        "seed_control_methods_attempted": md.get(
+            "seed_control_methods_attempted", sc.get("seed_control_methods_attempted", [])
+        ),
+        "seed_control_method_applied": md.get(
+            "seed_control_method_applied", sc.get("seed_control_method_applied")
+        ),
+        "seed_control_env_seed_return": md.get(
+            "seed_control_env_seed_return", sc.get("seed_control_env_seed_return")
+        ),
         "legs": legs,
         "seat_swap_summary": {
             "same_requested_seed": bool(same_seed),

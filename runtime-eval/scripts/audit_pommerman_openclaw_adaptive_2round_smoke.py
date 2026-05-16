@@ -65,7 +65,7 @@ def _audit_round_manifest(path: Path, *, expected_round_idx: int) -> tuple[list[
         if m.get("requested_seed") is None:
             errors.append(f"round_{expected_round_idx}: requested_seed missing")
         status = m.get("seed_control_status")
-        if status == "requested_but_not_applied":
+        if status in {"requested_but_not_applied", "unsupported_by_environment"}:
             warnings.append(f"round_{expected_round_idx}/{m.get('match_id')}: seed requested but not applied")
         elif status == "applied":
             if m.get("applied_seed") is None or m.get("seed") != m.get("applied_seed"):
