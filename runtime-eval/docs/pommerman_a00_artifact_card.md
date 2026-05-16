@@ -13,6 +13,7 @@ Included:
 - Generic schedule builder/audit helpers
 - 6-model execution smoke
 - 10-round adaptive dry-run
+- Pommerman process feedback v1
 - OpenClaw route validation
 - Real OpenClaw-Minimal revision smokes (single-agent and all-agent, both 1-round)
 - 2-round real OpenClaw adaptive smoke
@@ -63,7 +64,30 @@ Not included:
 - Confirms all six current `provider_model` refs are known routes.
 - Fallback to `relay/gpt-4.1` does not count as success.
 
-7. Real OpenClaw-Minimal revision smokes
+7. Pommerman process feedback v1
+- Audit:
+  - `scripts/audit_pommerman_process_feedback.py`
+- Process feedback v1 has run.
+- Generated per match:
+  - `logs/round_<r>/match_<m>/trajectory_summary.json`
+  - `logs/round_<r>/match_<m>/agent_feedback_<agent_id>.json`
+  - `logs/round_<r>/match_<m>/agent_feedback_<agent_id>.md`
+- Source artifacts (result-level only):
+  - `metadata.json`
+  - `scorecard.json`
+  - `arena_result_match_a.json`
+  - `arena_result_match_b.json`
+- Seat-swap handling:
+  - combines `match_a` and `match_b` outcomes for tested agents
+  - feedback files are generated for tested agents only (not `dummy2` / `dummy3`)
+- Hint policy:
+  - seat-swap instability hint only when `outcome_changed_under_swap=true` or `seat_sensitivity_observed=true`
+  - neutral robustness hint when no seat-swap outcome change was observed
+- Explicit limitations:
+  - no tick-level actions, board states, bomb events, or death causes are recorded yet
+  - this is not full replay
+
+8. Real OpenClaw-Minimal revision smokes
 - Single-agent real revision smoke passes.
 - All-agent real revision smoke passes.
 - For all six agents in all-agent smoke:
@@ -72,7 +96,7 @@ Not included:
   - `fallback_used=false`
 - This remains a 1-round smoke, not the full 10-round real experiment.
 
-8. 2-round real OpenClaw adaptive smoke
+9. 2-round real OpenClaw adaptive smoke
 - Config:
   - `configs/tournaments/pommerman_gptv16_a00_openclaw_adaptive_2round_smoke.yaml`
 - Audit:
@@ -126,6 +150,8 @@ python scripts/validate_openclaw_model_routes.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 python scripts/audit_openclaw_model_routes.py
 
+python scripts/audit_pommerman_process_feedback.py
+
 python scripts/audit_pommerman_formal_schedule.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 
@@ -152,6 +178,10 @@ python -m runner.main \
   --tournament configs/tournaments/pommerman_gptv16_a00_6model_adaptive_dryrun.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 python scripts/audit_pommerman_10round_adaptive_dryrun.py
+
+# Optional inspection examples
+find logs/round_1/match_1 -maxdepth 1 -type f | sort | grep -E "trajectory|agent_feedback"
+sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
 ```
 
 ## 7) Expected Success Signals
@@ -159,6 +189,7 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - `pairing_manifest_audit=PASS`
 - `formal_schedule_audit=PASS`
 - `openclaw_model_route_audit=PASS`
+- `pommerman_process_feedback_audit=PASS`
 - `openclaw_revision_smoke_audit=PASS`
 - `openclaw_revision_smoke_all_agents_audit=PASS`
 - `openclaw_adaptive_2round_smoke_audit=PASS`
@@ -171,6 +202,9 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - `logs/round_1/revision_manifest.json`
 - `logs/round_2/round_manifest.json`
 - `logs/round_2/propagation_manifest.json`
+- `logs/round_<r>/match_<m>/trajectory_summary.json`
+- `logs/round_<r>/match_<m>/agent_feedback_<agent_id>.json`
+- `logs/round_<r>/match_<m>/agent_feedback_<agent_id>.md`
 - `logs/round_1/match_1/`, `logs/round_1/match_2/`, `logs/round_1/match_3/`
 - `logs/round_2/match_1/`, `logs/round_2/match_2/`, `logs/round_2/match_3/`
 - `workspace/codebases/<tournament>/<agent_id>/codebase_play_1/`
@@ -185,6 +219,9 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - This is a warning, not a failure.
 
 ## 10) Strict Status Wording
+- process feedback v1 has run.
 - 2-round real OpenClaw adaptive smoke has run.
 - 10-round adaptive dry-run has run.
+- compact trajectory v2 remains future work.
+- full tick-level replay remains future work.
 - Full 10-round real OpenClaw adaptive run remains future work.

@@ -11,6 +11,7 @@ Checkpoint scope is **Pommerman + A00 only**.
   - Formal schedule dry-run + audit
   - 6-model execution smoke (`1 round x 3 matches`)
   - 10-round adaptive dry-run (`10 rounds x 3 matches`)
+  - Pommerman process feedback v1
   - OpenClaw model route validation
   - Real OpenClaw-Minimal revision smokes:
     - single-agent (`1 round`)
@@ -40,6 +41,8 @@ python scripts/validate_openclaw_model_routes.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 python scripts/audit_openclaw_model_routes.py
 
+python scripts/audit_pommerman_process_feedback.py
+
 python scripts/audit_pommerman_formal_schedule.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 
@@ -66,6 +69,10 @@ python -m runner.main \
   --tournament configs/tournaments/pommerman_gptv16_a00_6model_adaptive_dryrun.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 python scripts/audit_pommerman_10round_adaptive_dryrun.py
+
+# Optional inspection examples
+find logs/round_1/match_1 -maxdepth 1 -type f | sort | grep -E "trajectory|agent_feedback"
+sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
 ```
 
 ## Expected Success Signals
@@ -73,6 +80,7 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - `pairing_manifest_audit=PASS`
 - `formal_schedule_audit=PASS`
 - `openclaw_model_route_audit=PASS`
+- `pommerman_process_feedback_audit=PASS`
 - `openclaw_revision_smoke_audit=PASS`
 - `openclaw_revision_smoke_all_agents_audit=PASS`
 - `openclaw_adaptive_2round_smoke_audit=PASS`
@@ -83,8 +91,11 @@ python scripts/audit_pommerman_10round_adaptive_dryrun.py
 - This is a warning, not a failure.
 
 ## Status Wording
+- **process feedback v1 has run.**
 - **2-round real OpenClaw adaptive smoke has run.**
 - **10-round adaptive dry-run has run.**
+- **compact trajectory v2 remains future work.**
+- **full tick-level replay remains future work.**
 - **Full 10-round real OpenClaw adaptive run remains future work.**
 
 Detailed protocol notes: `docs/pommerman_a00_artifact_card.md`.
