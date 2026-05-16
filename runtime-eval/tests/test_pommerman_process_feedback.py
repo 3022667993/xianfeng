@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from runner.core.pommerman_feedback import build_trajectory_summary, build_agent_feedback
+from runner.core.pommerman_feedback import _feedback_md, build_agent_feedback, build_trajectory_summary
 from scripts.audit_pommerman_process_feedback import audit_process_feedback
 
 
@@ -117,3 +117,47 @@ def test_process_feedback_audit_fails_on_dummy_feedback(tmp_path, monkeypatch):
     (match_dir / "agent_feedback_dummy2.json").write_text("{}", encoding="utf-8")
     errors, _warnings = audit_process_feedback()
     assert any("dummy feedback file must not exist" in e for e in errors)
+
+
+def test_process_feedback_md_uses_compact_limitations_when_present(tmp_path):
+    match_dir = _mk_match(tmp_path)
+    summary = build_trajectory_summary(match_dir, 1, 1)
+    (match_dir / "trajectory_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    compact_events = {
+        "schema_version": "pommerman_compact_trajectory_events_v2",
+        "legs": {
+            "match_a": {
+                "trajectory_path": str(match_dir / "trajectory_compact_match_a.jsonl"),
+                "capture_status": "captured",
+                "step_count": 1,
+                "terminal_step": None,
+                "winner_seats": None,
+                "first_reward_change_step": None,
+                "alive_change_steps": [],
+                "final_reward": [0, 0, 0, 0],
+                "capture_notes": [],
+            },
+            "match_b": {
+                "trajectory_path": str(match_dir / "trajectory_compact_match_b.jsonl"),
+                "capture_status": "captured",
+                "step_count": 1,
+                "terminal_step": 9,
+                "winner_seats": [0],
+                "first_reward_change_step": 9,
+                "alive_change_steps": [9],
+                "final_reward": [1, -1, -1, -1],
+                "capture_notes": [],
+            },
+        },
+        "agent_event_summaries": {},
+        "limitations": [
+            "compact trajectory v2 does not store full board arrays",
+            "compact trajectory v2 does not store full observations",
+            "death causes, bomb ownership, and power-up pickup causes are only recorded if available from compact fields",
+        ],
+    }
+    (match_dir / "trajectory_events.json").write_text(json.dumps(compact_events), encoding="utf-8")
+    fb = build_agent_feedback(summary, "a1", match_dir)
+    rendered = _feedback_md(fb)
+    assert "compact trajectory v2 records lightweight per-step actions" in rendered.lower()
+    assert "tick-level actions, board states, bomb events, and death causes are not yet recorded" not in rendered.lower()

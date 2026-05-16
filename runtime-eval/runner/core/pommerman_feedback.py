@@ -194,6 +194,35 @@ def build_agent_feedback(summary: dict, agent_id: str, match_dir: Path) -> dict:
         "short_game_loss_observed": any(x["result"] == "loss" and isinstance(x["steps"], int) and x["steps"] <= 100 for x in leg_results),
         "long_game_win_observed": any(x["result"] == "win" and isinstance(x["steps"], int) and x["steps"] >= 250 for x in leg_results),
     }
+    compact_events_path = match_dir / "trajectory_events.json"
+    compact_events = None
+    if compact_events_path.exists():
+        try:
+            compact_events = load_json(compact_events_path)
+        except Exception:
+            compact_events = None
+    compact_v2 = None
+    if isinstance(compact_events, dict):
+        legs = compact_events.get("legs", {})
+        compact_v2 = {
+            "events_path": str(compact_events_path),
+            "match_a": legs.get("match_a", {}),
+            "match_b": legs.get("match_b", {}),
+            "limitations": compact_events.get("limitations", []),
+        }
+
+    if compact_v2 is not None:
+        limitations = [
+            "process_feedback_v1 is derived from result-level arena artifacts and compact trajectory v2 when available",
+            "compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
+            "full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
+        ]
+    else:
+        limitations = [
+            "process_feedback_v1 is derived from result-level arena artifacts only",
+            "tick-level actions, board states, bomb events, and death causes are not yet recorded",
+        ]
+
     return {
         "schema_version": "pommerman_agent_feedback_v1",
         "round_idx": summary["round_idx"],
@@ -218,10 +247,8 @@ def build_agent_feedback(summary: dict, agent_id: str, match_dir: Path) -> dict:
         "diagnostics": diag,
         "factual_observations": list(summary["agent_summaries"][agent_id]["factual_observations"]),
         "next_round_hints": list(summary["agent_summaries"][agent_id]["next_round_hints"]),
-        "limitations": [
-            "process_feedback_v1 is derived from result-level arena artifacts only",
-            "tick-level actions, board states, bomb events, and death causes are not yet recorded",
-        ],
+        "compact_trajectory_v2": compact_v2,
+        "limitations": limitations,
     }
 
 
@@ -250,6 +277,24 @@ def _feedback_md(payload: dict) -> str:
     lines.append("## Next-Round Hints")
     for x in payload["next_round_hints"]:
         lines.append(f"- {x}")
+    lines.append("")
+    lines.append("## Compact Trajectory v2")
+    c = payload.get("compact_trajectory_v2")
+    if not isinstance(c, dict):
+        lines.append("- compact trajectory v2 artifact not available for this match")
+    else:
+        lines.append(f"- events_path: {c.get('events_path')}")
+        for leg_label in ["match_a", "match_b"]:
+            leg = c.get(leg_label, {})
+            if not isinstance(leg, dict):
+                continue
+            lines.append(
+                f"- {leg_label}: capture_status={leg.get('capture_status')}, step_count={leg.get('step_count')}, terminal_step={leg.get('terminal_step')}, first_reward_change_step={leg.get('first_reward_change_step')}, alive_change_steps={leg.get('alive_change_steps')}"
+            )
+        lims = c.get("limitations", [])
+        if isinstance(lims, list):
+            for x in lims:
+                lines.append(f"- limitation: {x}")
     lines.append("")
     lines.append("## Limitations")
     for x in payload["limitations"]:

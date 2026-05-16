@@ -57,6 +57,76 @@ class Pommerman1v1Adapter(BaseGameAdapter):
             check=False,
         )
 
+    @staticmethod
+    def _load_compact_rows(path: Path) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        if not path.exists():
+            return rows
+        for line in path.read_text(encoding="utf-8").splitlines():
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+            except Exception:
+                continue
+            if isinstance(payload, dict):
+                rows.append(payload)
+        return rows
+
+    @staticmethod
+    def _events_from_rows(
+        rows: list[dict[str, Any]],
+        *,
+        trajectory_path: Path,
+        winner_seats: Any,
+    ) -> dict[str, Any]:
+        if not rows:
+            return {
+                "trajectory_path": str(trajectory_path),
+                "capture_status": "unsupported",
+                "step_count": 0,
+                "terminal_step": None,
+                "winner_seats": winner_seats if isinstance(winner_seats, list) else None,
+                "first_reward_change_step": None,
+                "alive_change_steps": [],
+                "final_reward": None,
+                "capture_notes": ["trajectory_empty_or_unavailable"],
+            }
+        alive_change_steps: list[int] = []
+        first_reward_change_step: int | None = None
+        terminal_step: int | None = None
+        capture_notes: list[str] = []
+        for row in rows:
+            flags = row.get("event_flags") if isinstance(row.get("event_flags"), dict) else {}
+            step = row.get("step")
+            if flags.get("alive_changed") is True and isinstance(step, int):
+                alive_change_steps.append(step)
+            if first_reward_change_step is None and flags.get("reward_changed") is True and isinstance(step, int):
+                first_reward_change_step = step
+            if flags.get("terminal") is True and isinstance(step, int):
+                terminal_step = step
+            notes = row.get("capture_notes")
+            if isinstance(notes, list):
+                for n in notes:
+                    if isinstance(n, str) and n not in capture_notes:
+                        capture_notes.append(n)
+        final_reward = rows[-1].get("reward")
+        status = "captured"
+        if capture_notes:
+            status = "partial"
+        return {
+            "trajectory_path": str(trajectory_path),
+            "capture_status": status,
+            "step_count": len(rows),
+            "terminal_step": terminal_step,
+            "winner_seats": winner_seats if isinstance(winner_seats, list) else None,
+            "first_reward_change_step": first_reward_change_step,
+            "alive_change_steps": alive_change_steps,
+            "final_reward": final_reward,
+            "capture_notes": capture_notes,
+        }
+
     def run_match(
         self,
         left_codebase: Path,
@@ -106,6 +176,9 @@ class Pommerman1v1Adapter(BaseGameAdapter):
 
         arena_result_match_a_path = (round_dir / "arena_result_match_a.json").resolve()
         arena_result_match_b_path = (round_dir / "arena_result_match_b.json").resolve()
+        compact_match_a_path = (round_dir / "trajectory_compact_match_a.jsonl").resolve()
+        compact_match_b_path = (round_dir / "trajectory_compact_match_b.jsonl").resolve()
+        trajectory_events_path = (round_dir / "trajectory_events.json").resolve()
         legacy_arena_result_path = round_dir / "arena_result.json"
         legacy_pair_scorecard_path = round_dir / "pair_scorecard.json"
         if legacy_arena_result_path.exists():
@@ -125,6 +198,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     str(arena_result_match_a_path),
                     str(left_submission_main),
                     str(right_submission_main),
+                    str(compact_match_a_path),
                 ],
             )
             arena_run_match_b = self._run_cmd(
@@ -135,6 +209,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     str(arena_result_match_b_path),
                     str(right_submission_main),
                     str(left_submission_main),
+                    str(compact_match_b_path),
                 ],
             )
 
@@ -177,6 +252,136 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                 )
                 arena_result_match_b_path.write_text(
                     json.dumps(arena_payload_match_b, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                rows_a = self._load_compact_rows(compact_match_a_path)
+                rows_b = self._load_compact_rows(compact_match_b_path)
+                for row in rows_a:
+                    row["leg_label"] = "match_a"
+                for row in rows_b:
+                    row["leg_label"] = "match_b"
+                compact_match_a_path.write_text(
+                    "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows_a),
+                    encoding="utf-8",
+                )
+                compact_match_b_path.write_text(
+                    "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows_b),
+                    encoding="utf-8",
+                )
+                round_name = round_dir.parent.name
+                round_idx = None
+                if round_name.startswith("round_"):
+                    try:
+                        round_idx = int(round_name.split("_", 1)[1])
+                    except Exception:
+                        round_idx = None
+                match_idx = None
+                if round_dir.name.startswith("match_"):
+                    try:
+                        match_idx = int(round_dir.name.split("_", 1)[1])
+                    except Exception:
+                        match_idx = None
+                left_agent_id = left_codebase.parent.name
+                right_agent_id = right_codebase.parent.name
+                pair_id = "__vs__".join(sorted([left_agent_id, right_agent_id]))
+                trajectory_events_payload = {
+                    "schema_version": "pommerman_compact_trajectory_events_v2",
+                    "round_idx": round_idx,
+                    "match_idx": match_idx,
+                    "match_id": round_dir.name,
+                    "pair_id": pair_id,
+                    "legs": {
+                        "match_a": self._events_from_rows(
+                            rows_a,
+                            trajectory_path=compact_match_a_path,
+                            winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
+                        ),
+                        "match_b": self._events_from_rows(
+                            rows_b,
+                            trajectory_path=compact_match_b_path,
+                            winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
+                        ),
+                    },
+                    "agent_event_summaries": {
+                        left_agent_id: {
+                            "agent_id": left_agent_id,
+                            "roles_seen": ["left", "right"],
+                            "observed_steps": [
+                                len(rows_a),
+                                len(rows_b),
+                            ],
+                            "alive_change_observed": bool(
+                                self._events_from_rows(
+                                    rows_a,
+                                    trajectory_path=compact_match_a_path,
+                                    winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
+                                )["alive_change_steps"]
+                                or self._events_from_rows(
+                                    rows_b,
+                                    trajectory_path=compact_match_b_path,
+                                    winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
+                                )["alive_change_steps"]
+                            ),
+                            "terminal_outcomes": [
+                                self._events_from_rows(
+                                    rows_a,
+                                    trajectory_path=compact_match_a_path,
+                                    winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
+                                )["terminal_step"],
+                                self._events_from_rows(
+                                    rows_b,
+                                    trajectory_path=compact_match_b_path,
+                                    winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
+                                )["terminal_step"],
+                            ],
+                            "compact_process_observations": [
+                                "Compact trajectory captured without full board replay.",
+                            ],
+                        },
+                        right_agent_id: {
+                            "agent_id": right_agent_id,
+                            "roles_seen": ["left", "right"],
+                            "observed_steps": [
+                                len(rows_a),
+                                len(rows_b),
+                            ],
+                            "alive_change_observed": bool(
+                                self._events_from_rows(
+                                    rows_a,
+                                    trajectory_path=compact_match_a_path,
+                                    winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
+                                )["alive_change_steps"]
+                                or self._events_from_rows(
+                                    rows_b,
+                                    trajectory_path=compact_match_b_path,
+                                    winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
+                                )["alive_change_steps"]
+                            ),
+                            "terminal_outcomes": [
+                                self._events_from_rows(
+                                    rows_a,
+                                    trajectory_path=compact_match_a_path,
+                                    winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
+                                )["terminal_step"],
+                                self._events_from_rows(
+                                    rows_b,
+                                    trajectory_path=compact_match_b_path,
+                                    winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
+                                )["terminal_step"],
+                            ],
+                            "compact_process_observations": [
+                                "Compact trajectory captured without full board replay.",
+                            ],
+                        },
+                    },
+                    "limitations": [
+                        "compact trajectory v2 does not store full board arrays",
+                        "compact trajectory v2 does not store full observations",
+                        "death causes, bomb ownership, and power-up pickup causes are only recorded if available from compact fields",
+                    ],
+                }
+                trajectory_events_path.write_text(
+                    json.dumps(trajectory_events_payload, ensure_ascii=False, indent=2),
                     encoding="utf-8",
                 )
 
