@@ -17,12 +17,15 @@ Included:
 - OpenClaw route validation
 - Real OpenClaw-Minimal revision smokes (single-agent and all-agent, both 1-round)
 - 2-round real OpenClaw adaptive smoke
+- Pommerman seed control applied via `env.seed(...)`
+- Compact trajectory v2 has run
 
 Not included:
 - A01, A11, A10
 - Lux, Kore, Halite, Held-Out
 - Paired aggregate scorecards
-- Full 10-round real OpenClaw adaptive tournament execution
+- Full board/observation replay
+- Full 10-round real OpenClaw adaptive run
 
 ## 2) Current Completed Stages
 1. A00 artifact/smoke layer
@@ -30,7 +33,7 @@ Not included:
 - Raw per-match scorecards preserved.
 - `logs/pairing_manifest.json` generated and audited.
 - Seed provenance recorded.
-- `requested_but_not_applied` seed warnings are acceptable.
+- Seed control is applied via `env.seed(...)`.
 
 2. Formal schedule dry-run
 - Two-cycle double round robin.
@@ -113,6 +116,58 @@ Not included:
   - `propagation_ok=true`, `source_revision_ok=true`, `source_provider_route_status=matched`
 - This remains a smoke, not the full 10-round real OpenClaw experiment.
 
+10. Pommerman seed control applied
+- Audit:
+  - `scripts/audit_pommerman_seed_control.py`
+- Expected success:
+  - `pommerman_seed_control_audit=PASS`
+- Seed provenance fields are propagated into:
+  - `metadata.json`
+  - `scorecard.json`
+  - `arena_result_match_a.json`
+  - `arena_result_match_b.json`
+  - `trajectory_summary.json`
+  - `trajectory_events.json`
+- Current status:
+  - `seed_control_status=applied`
+  - `applied_seed=requested_seed`
+  - `seed=requested_seed`
+  - `seed_control_method_applied=env.seed(...)`
+- Previous warning `seed requested but not applied` is resolved for current Pommerman adaptive smoke.
+
+11. Feedback available to models each round
+- Models can read:
+  - `metadata.json`
+  - `scorecard.json`
+  - `arena_result_match_a.json`
+  - `arena_result_match_b.json`
+  - `build.log`
+  - `test.log`
+  - `stderr.log`
+  - `trajectory_summary.json`
+  - `agent_feedback_<agent_id>.json`
+  - `agent_feedback_<agent_id>.md`
+  - `trajectory_compact_match_a.jsonl`
+  - `trajectory_compact_match_b.jsonl`
+  - `trajectory_events.json`
+  - `notes/revision_log.md` and `revision_audit.json` from prior revisions when present
+- `process feedback v1` is a factual summary layer.
+- compact trajectory v2 has run.
+- compact trajectory v2 is lightweight per-step process feedback.
+- compact trajectory v2 is not full replay.
+- no full board arrays or full observations are stored.
+- death causes, bomb ownership, and power-up pickup causes remain future work unless explicitly supported by compact fields.
+
+12. Revision autonomy
+- Runner/config decides OpenClaw invocation using:
+  - `revision_rounds`
+  - `revision_subset_size`
+  - `require_all_agents_revised`
+- During OpenClaw revision, models autonomously decide how to modify code.
+- A model may make small changes or no meaningful code change.
+- Audits verify invocation, provider route, `fallback_used=false`, and `revision_ok`.
+- Audits do not require a forced code diff in every round.
+
 ## 3) Current Route-Valid 6-Agent Roster
 Config:
 - `configs/models/openclaw_relay_6model_deepseek_glm.yaml`
@@ -151,6 +206,8 @@ python scripts/validate_openclaw_model_routes.py \
 python scripts/audit_openclaw_model_routes.py
 
 python scripts/audit_pommerman_process_feedback.py
+python scripts/audit_pommerman_compact_trajectory.py
+python scripts/audit_pommerman_seed_control.py
 
 python scripts/audit_pommerman_formal_schedule.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
@@ -190,10 +247,13 @@ sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
 - `formal_schedule_audit=PASS`
 - `openclaw_model_route_audit=PASS`
 - `pommerman_process_feedback_audit=PASS`
+- `pommerman_compact_trajectory_audit=PASS`
+- `pommerman_seed_control_audit=PASS`
 - `openclaw_revision_smoke_audit=PASS`
 - `openclaw_revision_smoke_all_agents_audit=PASS`
 - `openclaw_adaptive_2round_smoke_audit=PASS`
 - `adaptive_dryrun_audit=PASS`
+- no `seed requested but not applied` warnings for current Pommerman adaptive smoke
 
 ## 8) Output Artifacts
 - `logs/pairing_manifest.json`
@@ -214,14 +274,18 @@ sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
 - `workspace/submissions/<tournament>/<agent_id>/submission_2/`
 - `workspace/posts/<tournament>/<agent_id>/codebase_post_2/`
 
-## 9) Known Warnings
-- `requested_seed` with `seed_control_status=requested_but_not_applied` is acceptable for current smoke/adaptive layers because environment-level seed application is not yet proven.
-- This is a warning, not a failure.
+## 9) Generated Artifacts Policy
+- `workspace/` is generated runtime state.
+- `logs/round_*` are generated run artifacts.
+- Generated artifacts should not be versioned.
+- Verify generated paths are not tracked:
+  - `git ls-files workspace`
+  - `git ls-files logs`
 
 ## 10) Strict Status Wording
 - process feedback v1 has run.
 - 2-round real OpenClaw adaptive smoke has run.
 - 10-round adaptive dry-run has run.
-- compact trajectory v2 remains future work.
-- full tick-level replay remains future work.
+- compact trajectory v2 has run.
+- full board/observation replay remains future work.
 - Full 10-round real OpenClaw adaptive run remains future work.

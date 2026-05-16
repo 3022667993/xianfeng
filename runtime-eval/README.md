@@ -17,10 +17,13 @@ Checkpoint scope is **Pommerman + A00 only**.
     - single-agent (`1 round`)
     - all-agent (`1 round`, all 6 agents)
   - 2-round real OpenClaw adaptive smoke (`2 rounds x 3 matches`)
+  - Pommerman seed control applied via `env.seed(...)`
+  - Compact trajectory v2 has run
 - Not implemented here:
   - A01, A11, A10
   - Lux, Kore, Halite, Held-Out
-  - Full 10-round real OpenClaw adaptive tournament
+  - Full board/observation replay
+  - Full 10-round real OpenClaw adaptive run
 
 ## Current Route-Valid 6-Agent Roster
 Config: `configs/models/openclaw_relay_6model_deepseek_glm.yaml`
@@ -42,6 +45,8 @@ python scripts/validate_openclaw_model_routes.py \
 python scripts/audit_openclaw_model_routes.py
 
 python scripts/audit_pommerman_process_feedback.py
+python scripts/audit_pommerman_compact_trajectory.py
+python scripts/audit_pommerman_seed_control.py
 
 python scripts/audit_pommerman_formal_schedule.py \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
@@ -81,21 +86,73 @@ sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
 - `formal_schedule_audit=PASS`
 - `openclaw_model_route_audit=PASS`
 - `pommerman_process_feedback_audit=PASS`
+- `pommerman_compact_trajectory_audit=PASS`
+- `pommerman_seed_control_audit=PASS`
 - `openclaw_revision_smoke_audit=PASS`
 - `openclaw_revision_smoke_all_agents_audit=PASS`
 - `openclaw_adaptive_2round_smoke_audit=PASS`
 - `adaptive_dryrun_audit=PASS`
+- no `seed requested but not applied` warnings for current Pommerman adaptive smoke
 
-## Known Warning
-- `requested_seed` with `seed_control_status=requested_but_not_applied` is acceptable for current smoke/adaptive layers.
-- This is a warning, not a failure.
+## Seed Control Applied
+- Seed control is applied via `env.seed(...)`.
+- Audit command: `python scripts/audit_pommerman_seed_control.py`.
+- Expected result: `pommerman_seed_control_audit=PASS`.
+- Seed provenance fields are propagated into:
+  - `metadata.json`
+  - `scorecard.json`
+  - `arena_result_match_a.json`
+  - `arena_result_match_b.json`
+  - `trajectory_summary.json`
+  - `trajectory_events.json`
+- Current status fields:
+  - `seed_control_status=applied`
+  - `applied_seed=requested_seed`
+  - `seed=requested_seed`
+  - `seed_control_method_applied=env.seed(...)`
+
+## Feedback Inputs Per Round
+- Models can read these generated artifacts for each match:
+  - `metadata.json`
+  - `scorecard.json`
+  - `arena_result_match_a.json`
+  - `arena_result_match_b.json`
+  - `build.log`
+  - `test.log`
+  - `stderr.log`
+  - `trajectory_summary.json`
+  - `agent_feedback_<agent_id>.json`
+  - `agent_feedback_<agent_id>.md`
+  - `trajectory_compact_match_a.jsonl`
+  - `trajectory_compact_match_b.jsonl`
+  - `trajectory_events.json`
+  - `notes/revision_log.md` and `revision_audit.json` from prior revisions when present
+- `process feedback v1` is a factual summary layer.
+- compact trajectory v2 has run.
+- compact trajectory v2 is lightweight per-step process feedback, not full replay.
+- full board/observation replay remains future work.
+- Death causes, bomb ownership, and power-up pickup causes remain future work unless explicitly supported by compact fields.
+
+## Revision Autonomy
+- Runner/config controls revision invocation via `revision_rounds`, `revision_subset_size`, and `require_all_agents_revised`.
+- During OpenClaw revision, the model autonomously decides how to modify code.
+- A model may make small changes or no meaningful code change.
+- Audits verify invocation, provider routing, `fallback_used=false`, and `revision_ok`; audits do not require a forced code diff every round.
+
+## Generated Artifacts Policy
+- `workspace/` is generated runtime state.
+- `logs/round_*` are generated run artifacts.
+- Generated artifacts should not be versioned.
+- Verify with:
+  - `git ls-files workspace`
+  - `git ls-files logs`
 
 ## Status Wording
 - **process feedback v1 has run.**
 - **2-round real OpenClaw adaptive smoke has run.**
 - **10-round adaptive dry-run has run.**
-- **compact trajectory v2 remains future work.**
-- **full tick-level replay remains future work.**
+- **compact trajectory v2 has run.**
+- **full board/observation replay remains future work.**
 - **Full 10-round real OpenClaw adaptive run remains future work.**
 
 Detailed protocol notes: `docs/pommerman_a00_artifact_card.md`.
