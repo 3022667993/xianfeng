@@ -15,3 +15,5 @@ starter_repos/*/artifacts/
 starter_repos/*/.cache/
 
 .DS_Store
+workspace/
+logs/round_*
