@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from runner.core import openclaw_minimal as ocm
@@ -50,6 +51,39 @@ def test_run_openclaw_agent_omits_model_when_provider_model_none(monkeypatch):
     _resp, _out, _err, code = ocm._run_openclaw_agent("msg", agent_id="main", provider_model=None)
     assert code == 0
     assert all("--model" not in c for c in calls)
+
+
+def test_revision_message_includes_feedback_and_effective_change_requirements():
+    msg = ocm._make_revision_message(
+        bootstrap_text="BOOT",
+        run_dir=Path("/tmp/run"),
+        codebase_post_t_dir=Path("/tmp/run/codebase_post_t"),
+        feedback_copy_path=Path("/tmp/run/feedback_package.json"),
+        side="left",
+        game="pommerman_1v1",
+        regime="A00",
+        retry_on_noop=True,
+    )
+    assert "agent_feedback_<agent_id>.md" in msg
+    assert "trajectory_summary.json" in msg
+    assert "trajectory_events.json" in msg
+    assert "You must modify submission/main.py" in msg
+    assert "Previous attempt made no submitted-code change" in msg
+
+
+def test_revision_message_renders_extra_artifact_paths():
+    msg = ocm._make_revision_message(
+        bootstrap_text="BOOT",
+        run_dir=Path("/tmp/run"),
+        codebase_post_t_dir=Path("/tmp/run/codebase_post_t"),
+        feedback_copy_path=Path("/tmp/run/feedback_package.json"),
+        side="left",
+        game="pommerman_1v1",
+        regime="A00",
+        extra_artifact_paths=["/tmp/run/match/scorecard.json", "/tmp/run/match/trajectory_summary.json"],
+    )
+    assert "additional round artifacts provided by runner" in msg
+    assert "/tmp/run/match/scorecard.json" in msg
 
 
 def test_provider_route_mismatch_still_fails_openclaw_revision_smoke_audit(tmp_path, monkeypatch):

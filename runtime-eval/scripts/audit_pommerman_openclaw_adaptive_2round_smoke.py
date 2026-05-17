@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 import yaml
@@ -8,6 +9,16 @@ import yaml
 
 def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _sha256_file(path: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _audit_a00() -> list[str]:
@@ -124,6 +135,26 @@ def audit_openclaw_adaptive_2round_smoke(
             errors.append("no round_1 agent may be skipped_by_budget_guard")
         if a.get("revision_executor") in {"dryrun-noop", "rule-minimal"}:
             errors.append("no round_1 agent may use dryrun-noop/rule-minimal")
+        if "effective_submission_changed" not in a:
+            errors.append("all round_1 agents must include effective_submission_changed")
+        if "changed_files_hash_based" not in a:
+            errors.append("all round_1 agents must include changed_files_hash_based")
+        if a.get("changed_files_inconsistent_with_hash") is True:
+            errors.append("round_1 agent has changed_files inconsistent with submission hash")
+        changed_files = a.get("changed_files")
+        if (
+            isinstance(changed_files, list)
+            and "submission/main.py" in changed_files
+            and a.get("effective_submission_changed") is False
+        ):
+            errors.append("round_1 agent reports submission/main.py changed but submission hash unchanged")
+        hash_based = a.get("changed_files_hash_based")
+        if (
+            isinstance(hash_based, list)
+            and "submission/main.py" in hash_based
+            and a.get("effective_submission_changed") is False
+        ):
+            errors.append("round_1 agent changed_files_hash_based contradicts effective_submission_changed=false")
 
     prop_path = Path("logs/round_2/propagation_manifest.json")
     if not prop_path.exists():
@@ -160,6 +191,20 @@ def audit_openclaw_adaptive_2round_smoke(
             errors.append(f"{agent_id}: source_post_path mismatch")
         if target_play != expected_target:
             errors.append(f"{agent_id}: target_play_path mismatch")
+        source_submission_sha256 = rec.get("source_submission_sha256")
+        target_submission_sha256 = rec.get("target_submission_sha256")
+        if source_submission_sha256 is None or target_submission_sha256 is None:
+            errors.append(f"{agent_id}: propagation manifest must include source/target submission sha256")
+        if rec.get("propagation_matches_post") is not True:
+            errors.append(f"{agent_id}: propagation_matches_post must be true")
+        expected_source_hash = _sha256_file(expected_source / "submission" / "main.py")
+        expected_target_hash = _sha256_file(expected_target / "submission" / "main.py")
+        if source_submission_sha256 != expected_source_hash:
+            errors.append(f"{agent_id}: source_submission_sha256 mismatch")
+        if target_submission_sha256 != expected_target_hash:
+            errors.append(f"{agent_id}: target_submission_sha256 mismatch")
+        if expected_source_hash != expected_target_hash:
+            errors.append(f"{agent_id}: propagated submission/main.py hash mismatch")
         sub2 = Path("workspace/submissions") / tournament_name / agent_id / "submission_2"
         if not sub2.exists():
             errors.append(f"{agent_id}: submission_2 missing")

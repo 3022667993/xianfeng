@@ -57,6 +57,15 @@ ALLOWED_CHANGED_FILES = {
     "submission/main.py",
 }
 
+IGNORED_GENERATED_CHANGED_SEGMENTS = {
+    "__pycache__",
+}
+
+IGNORED_BOOKKEEPING_CHANGED_FILES = {
+    "notes/revision_log.md",
+    "revision_audit.json",
+}
+
 
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -83,6 +92,33 @@ def _snapshot_files(root: Path) -> dict[str, str]:
 def _changed_files(before: dict[str, str], after: dict[str, str]) -> list[str]:
     keys = sorted(set(before) | set(after))
     return [key for key in keys if before.get(key) != after.get(key)]
+
+
+def _is_ignored_changed_file(rel: str) -> bool:
+    rel_norm = rel.replace("\\", "/")
+    if rel_norm in IGNORED_BOOKKEEPING_CHANGED_FILES:
+        return True
+    if rel_norm.endswith(".pyc"):
+        return True
+    parts = Path(rel_norm).parts
+    if any(part in IGNORED_GENERATED_CHANGED_SEGMENTS for part in parts):
+        return True
+    return False
+
+
+def _classify_changed_files(changed_files_temp: list[str]) -> tuple[list[str], list[str], list[str]]:
+    ignored: list[str] = []
+    disallowed: list[str] = []
+    copy_back: list[str] = []
+    for rel in changed_files_temp:
+        if _is_ignored_changed_file(rel):
+            ignored.append(rel)
+            continue
+        if rel in ALLOWED_CHANGED_FILES:
+            copy_back.append(rel)
+            continue
+        disallowed.append(rel)
+    return sorted(copy_back), sorted(ignored), sorted(disallowed)
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
@@ -211,7 +247,25 @@ def _make_revision_message(
     side: str,
     game: str,
     regime: str,
+    retry_on_noop: bool = False,
+    extra_artifact_paths: list[str] | None = None,
 ) -> str:
+    retry_suffix = ""
+    if retry_on_noop:
+        retry_suffix = (
+            "\nRetry requirement:\n"
+            "- Previous attempt made no submitted-code change.\n"
+            "- You must edit submission/main.py.\n"
+            "- Do not only write notes or audit files.\n"
+        )
+    extra_artifacts_block = ""
+    if isinstance(extra_artifact_paths, list) and extra_artifact_paths:
+        rendered = []
+        for p in extra_artifact_paths:
+            if isinstance(p, str) and p.strip():
+                rendered.append(f"  - {p}")
+        if rendered:
+            extra_artifacts_block = "  - additional round artifacts provided by runner:\n" + "\n".join(rendered) + "\n"
     return f"""You are OpenClaw-Minimal running inside a controlled runtime-eval revision executor.
 
 IMPORTANT:
@@ -235,12 +289,27 @@ Bootstrap contract:
 
 Task:
 - Read feedback from: {feedback_copy_path}
+- Inspect available artifacts in the match/workspace context, including:
+  - agent_feedback_<agent_id>.md
+  - trajectory_summary.json
+  - trajectory_events.json
+  - scorecard.json
+  - arena_result_match_a.json
+  - arena_result_match_b.json
+  - previous notes/revision_log.md if present
+{extra_artifacts_block}- If an artifact listed above exists, inspect it and use it.
 - Inspect bot code at: {codebase_post_t_dir / "submission/main.py"}
 - For Pommerman A00, revise the bot based on the feedback.
 - Only modify: {codebase_post_t_dir / "submission/main.py"}
 - Do not modify: {codebase_post_t_dir / "notes/revision_log.md"}
 - The runner will write revision_log.md separately.
 - Do not create or modify any other file.
+- You must modify submission/main.py; metadata-only edits do not count.
+- notes/revision_log.md alone does not count as a valid revision.
+- Keep submission runnable.
+- Make a small, concrete strategy change based on feedback.
+- If all games are 800-step draws, make the agent less purely passive while preserving survival.
+{retry_suffix}
 
 In your final response, briefly state what you changed.
 """
@@ -413,6 +482,8 @@ def main() -> None:
     )
     parser.add_argument("--model-id", required=False)
     parser.add_argument("--provider-model", required=False)
+    parser.add_argument("--retry-on-noop", action="store_true")
+    parser.add_argument("--artifact-path", action="append", default=[])
     args = parser.parse_args()
 
     started_at = time.time()
@@ -448,6 +519,8 @@ def main() -> None:
     returncode = 127
     feedback_data: dict[str, Any] | None = None
     changed_files_temp: list[str] = []
+    copy_back_changed_files: list[str] = []
+    ignored_changed_files: list[str] = []
     disallowed_changed_files: list[str] = []
     original_changed_unexpectedly: list[str] = []
     run_dir_file_list_before_cleanup: list[str] = []
@@ -476,6 +549,8 @@ def main() -> None:
             side=args.side,
             game=args.game,
             regime=args.regime,
+            retry_on_noop=bool(args.retry_on_noop),
+            extra_artifact_paths=[str(x) for x in (args.artifact_path or [])],
         )
 
         response, stdout, stderr, returncode = _run_openclaw_agent(
@@ -486,9 +561,7 @@ def main() -> None:
 
         after_temp_snapshot = _snapshot_files(run_codebase_post_t)
         changed_files_temp = _changed_files(before_temp_snapshot, after_temp_snapshot)
-        disallowed_changed_files = sorted(
-            [rel for rel in changed_files_temp if rel not in ALLOWED_CHANGED_FILES]
-        )
+        copy_back_changed_files, ignored_changed_files, disallowed_changed_files = _classify_changed_files(changed_files_temp)
 
         after_original_snapshot = _snapshot_files(codebase_post_dir)
         original_changed_unexpectedly = _changed_files(before_original_snapshot, after_original_snapshot)
@@ -529,14 +602,14 @@ def main() -> None:
         )
         success = len(errors) == 0
 
-        if success and changed_files_temp:
+        if success and copy_back_changed_files:
             _copy_allowed_changes_back(
                 src_codebase_post_t=run_codebase_post_t,
                 dst_codebase_post_dir=codebase_post_dir,
-                changed_files=changed_files_temp,
+                changed_files=copy_back_changed_files,
             )
 
-        changed = success and len(changed_files_temp) > 0
+        changed = success and len(copy_back_changed_files) > 0
 
         run_dir_file_list_before_cleanup = _list_files(run_dir)
 
@@ -576,9 +649,10 @@ def main() -> None:
             "openclawDefaultMissingPlaceholders": audit.get("openclawDefaultMissingPlaceholders", []),
             "allowedChangedFiles": sorted(ALLOWED_CHANGED_FILES),
             "changedFilesTemp": changed_files_temp,
+            "ignoredChangedFiles": ignored_changed_files,
             "disallowedChangedFiles": disallowed_changed_files,
             "originalChangedUnexpectedly": original_changed_unexpectedly,
-            "changedFiles": changed_files_temp if success else [],
+            "changedFiles": copy_back_changed_files if success else [],
             "runDirFileListBeforeCleanup": run_dir_file_list_before_cleanup,
         }
         _write_audit(audit_path, final_audit)
@@ -587,7 +661,7 @@ def main() -> None:
             "executor": "openclaw-minimal",
             "success": success,
             "changed": changed,
-            "changed_files": changed_files_temp if success else [],
+            "changed_files": copy_back_changed_files if success else [],
             "agent_id": agent_id,
             "model_id": model_id,
             "provider_model": provider_model,
@@ -601,6 +675,8 @@ def main() -> None:
             "openclaw_default_missing_placeholders": audit.get("openclawDefaultMissingPlaceholders", []),
             "audit_warnings": [],
             "audit_errors": errors,
+            "ignored_changed_files": ignored_changed_files,
+            "changed_files_temp": changed_files_temp,
             "previous_winner": previous_winner,
             "error": "; ".join(errors) if errors else None,
         }

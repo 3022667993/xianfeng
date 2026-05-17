@@ -1,0 +1,19 @@
+name: pommerman_gptv16_a00_openclaw_adaptive_3round_smoke
+game: pommerman_1v1
+regime: A00
+
+num_models: 6
+num_rounds: 3
+matches_per_round: 3
+independent_tournaments: 1
+openclaw_adaptive_smoke: true
+real_openclaw_revision: true
+low_budget_revision: true
+revision_executor: openclaw-minimal
+revision_rounds: [1, 2]
+revision_subset_size: 6
+require_all_agents_revised: true
+require_effective_submission_change: true
+revision_retry_on_noop: 1
+openclaw_runner_agent_id: main
+scorecard_policy: raw_per_match_scorecard; pair-level aggregation is post-analysis

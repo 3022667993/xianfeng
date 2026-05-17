@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 
 from runner.core.config import load_yaml
@@ -62,17 +63,35 @@ def _mk_round_manifest(tmp_path: Path, round_idx: int, tournament: str):
     )
 
 
-def _mk_fixture(tmp_path: Path, tournament: str = "pommerman_gptv16_a00_openclaw_adaptive_2round_smoke"):
+def _mk_fixture(
+    tmp_path: Path,
+    tournament: str = "pommerman_gptv16_a00_openclaw_adaptive_2round_smoke",
+    *,
+    effective_changed: bool = False,
+):
+    def _sha(text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
     agents = [f"a{i}" for i in range(1, 7)]
     for root in ["codebases", "submissions", "posts"]:
         for a in agents:
             for idx in [1, 2]:
                 p = tmp_path / "workspace" / root / tournament / a / f"{'codebase_play' if root=='codebases' else 'submission' if root=='submissions' else 'codebase_post'}_{idx}"
                 p.mkdir(parents=True, exist_ok=True)
+    for a in agents:
+        source_main = tmp_path / "workspace" / "posts" / tournament / a / "codebase_post_1" / "submission" / "main.py"
+        target_main = tmp_path / "workspace" / "codebases" / tournament / a / "codebase_play_2" / "submission" / "main.py"
+        play_main = tmp_path / "workspace" / "codebases" / tournament / a / "codebase_play_1" / "submission" / "main.py"
+        post2_main = tmp_path / "workspace" / "posts" / tournament / a / "codebase_post_2" / "submission" / "main.py"
+        for p in [source_main, target_main, play_main, post2_main]:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("AGGRESSION = 0\n", encoding="utf-8")
     _mk_round_manifest(tmp_path, 1, tournament)
     _mk_round_manifest(tmp_path, 2, tournament)
     rev_agents = []
     for a in agents:
+        submission_hash = _sha("AGGRESSION = 0\n")
+        after_hash = _sha("AGGRESSION = 1\n" if effective_changed else "AGGRESSION = 0\n")
         rev_agents.append(
             {
                 "agent_id": a,
@@ -85,8 +104,16 @@ def _mk_fixture(tmp_path: Path, tournament: str = "pommerman_gptv16_a00_openclaw
                 "codebase_play_path": f"workspace/codebases/{tournament}/{a}/codebase_play_1",
                 "submission_path": f"workspace/submissions/{tournament}/{a}/submission_1",
                 "codebase_post_path": f"workspace/posts/{tournament}/{a}/codebase_post_1",
-                "changed_files": [],
+                "changed_files": ["submission/main.py"] if effective_changed else [],
                 "diff_path": "",
+                "submission_main_sha256_before": submission_hash,
+                "submission_main_sha256_after": after_hash,
+                "effective_submission_changed": effective_changed,
+                "changed_files_hash_based": ["submission/main.py"] if effective_changed else [],
+                "diff_bytes": 1,
+                "diff_targets": ["submission/main.py"] if effective_changed else ["notes/revision_log.md", "revision_audit.json"],
+                "changed_files_reported_by_openclaw": [],
+                "changed_files_inconsistent_with_hash": False,
                 "revision_log_path": "",
                 "failure_reason": None,
                 "budget_guard_reason": None,
@@ -107,6 +134,7 @@ def _mk_fixture(tmp_path: Path, tournament: str = "pommerman_gptv16_a00_openclaw
     )
     prop_agents = []
     for a in agents:
+        sub_hash = _sha("AGGRESSION = 0\n")
         prop_agents.append(
             {
                 "agent_id": a,
@@ -116,6 +144,10 @@ def _mk_fixture(tmp_path: Path, tournament: str = "pommerman_gptv16_a00_openclaw
                 "propagation_ok": True,
                 "source_revision_ok": True,
                 "source_provider_route_status": "matched",
+                "source_submission_sha256": sub_hash,
+                "target_submission_sha256": sub_hash,
+                "propagated_submission_sha256": sub_hash,
+                "propagation_matches_post": True,
                 "file_count": 0,
                 "files": [],
             }
@@ -129,14 +161,14 @@ def _mk_fixture(tmp_path: Path, tournament: str = "pommerman_gptv16_a00_openclaw
 
 def test_adaptive_2round_audit_fixture_passes(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_fixture(tmp_path)
+    tournament = _mk_fixture(tmp_path, effective_changed=True)
     errors, _warnings = audit_openclaw_adaptive_2round_smoke(tournament)
     assert errors == []
 
 
 def test_adaptive_2round_audit_fails_without_propagation_manifest(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_fixture(tmp_path)
+    tournament = _mk_fixture(tmp_path, effective_changed=True)
     (tmp_path / "logs" / "round_2" / "propagation_manifest.json").unlink()
     errors, _warnings = audit_openclaw_adaptive_2round_smoke(tournament)
     assert any("missing logs/round_2/propagation_manifest.json" in e for e in errors)
@@ -144,7 +176,7 @@ def test_adaptive_2round_audit_fails_without_propagation_manifest(tmp_path, monk
 
 def test_adaptive_2round_audit_fails_on_route_mismatch(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_fixture(tmp_path)
+    tournament = _mk_fixture(tmp_path, effective_changed=True)
     rp = tmp_path / "logs" / "round_1" / "revision_manifest.json"
     rev = json.loads(rp.read_text(encoding="utf-8"))
     rev["agents"][0]["provider_route_status"] = "mismatch"
@@ -155,7 +187,7 @@ def test_adaptive_2round_audit_fails_on_route_mismatch(tmp_path, monkeypatch):
 
 def test_adaptive_2round_audit_fails_on_route_unknown(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_fixture(tmp_path)
+    tournament = _mk_fixture(tmp_path, effective_changed=True)
     rp = tmp_path / "logs" / "round_1" / "revision_manifest.json"
     rev = json.loads(rp.read_text(encoding="utf-8"))
     rev["agents"][0]["provider_route_status"] = "unknown"
@@ -166,7 +198,7 @@ def test_adaptive_2round_audit_fails_on_route_unknown(tmp_path, monkeypatch):
 
 def test_adaptive_2round_audit_fails_on_fallback_used(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_fixture(tmp_path)
+    tournament = _mk_fixture(tmp_path, effective_changed=True)
     rp = tmp_path / "logs" / "round_1" / "revision_manifest.json"
     rev = json.loads(rp.read_text(encoding="utf-8"))
     rev["agents"][0]["fallback_used"] = True
@@ -177,7 +209,7 @@ def test_adaptive_2round_audit_fails_on_fallback_used(tmp_path, monkeypatch):
 
 def test_adaptive_2round_audit_fails_if_agent_skipped(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_fixture(tmp_path)
+    tournament = _mk_fixture(tmp_path, effective_changed=True)
     rp = tmp_path / "logs" / "round_1" / "revision_manifest.json"
     rev = json.loads(rp.read_text(encoding="utf-8"))
     rev["agents"][0]["revision_attempted"] = False
@@ -189,7 +221,7 @@ def test_adaptive_2round_audit_fails_if_agent_skipped(tmp_path, monkeypatch):
 
 def test_adaptive_2round_audit_fails_if_play2_under_left_right(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_fixture(tmp_path)
+    tournament = _mk_fixture(tmp_path, effective_changed=True)
     bad = tmp_path / "workspace" / "codebases" / tournament / "left"
     bad.mkdir(parents=True, exist_ok=True)
     errors, _warnings = audit_openclaw_adaptive_2round_smoke(tournament)
@@ -198,7 +230,7 @@ def test_adaptive_2round_audit_fails_if_play2_under_left_right(tmp_path, monkeyp
 
 def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_fixture(tmp_path)
+    tournament = _mk_fixture(tmp_path, effective_changed=True)
     for rd in [tmp_path / "logs" / "round_1", tmp_path / "logs" / "round_2"]:
         for match_dir in sorted(p for p in rd.glob("match_*") if p.is_dir()):
             pair = [("a1", "a2"), ("a3", "a4"), ("a5", "a6")][int(match_dir.name.split("_")[-1]) - 1]

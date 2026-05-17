@@ -30,9 +30,9 @@ Config: `configs/models/openclaw_relay_6model_deepseek_glm.yaml`
 - `relay_bailian_deepseek_v4_flash` -> `relay/bailian/deepseek-v4-flash`
 - `relay_gemini_2_5_flash_thinking` -> `relay/gemini-2.5-flash-thinking`
 - `relay_deepseek_v3` -> `relay/deepseek-ai/DeepSeek-V3.2`
+- `relay_qwen3_5_plus` -> `relay/qwen3.5-plus`
 - `relay_glm_4_7` -> `glm-4.7`
 - `relay_glm_4_6` -> `glm-4.6`
-- `relay_glm_4_6v` -> `relay/glm-4.6v`
 
 ## Reproduction Commands
 ```bash

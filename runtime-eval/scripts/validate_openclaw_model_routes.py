@@ -14,6 +14,7 @@ import yaml
 
 OPENCLAW_DIR = Path(os.environ.get("OPENCLAW_DIR", "/root/autodl-tmp/external/openclaw"))
 _MODEL_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{1,120}$")
+_MODEL_REF_EMBEDDED_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{1,120}")
 
 
 def _load_yaml(path: Path) -> dict:
@@ -164,6 +165,16 @@ def _collect_model_refs_from_plugin_json(obj: Any, *, path: tuple[str, ...] = ()
     elif isinstance(obj, str):
         if _looks_like_model_ref(obj):
             refs.add(obj)
+        else:
+            # Some plugin catalogs mention valid model refs in explanatory text.
+            # Only accept embedded refs with an explicit provider separator to
+            # avoid broadening matching to arbitrary words.
+            for m in _MODEL_REF_EMBEDDED_RE.finditer(obj):
+                token = m.group(0).strip(".,;:!?)(")
+                if "/" not in token:
+                    continue
+                if _looks_like_model_ref(token):
+                    refs.add(token)
     return refs
 
 
@@ -224,6 +235,12 @@ def _suggest_model_ref(provider_model: str, known_refs: set[str]) -> str | None:
         stripped = provider_model[len("relay/"):]
         if stripped in known_refs:
             return stripped
+        prefixed = f"qwen/{stripped}"
+        if prefixed in known_refs:
+            return prefixed
+        stripped_suffix_matches = [ref for ref in known_refs if ref.endswith(f"/{stripped}")]
+        if len(stripped_suffix_matches) == 1:
+            return stripped_suffix_matches[0]
     else:
         relay_candidate = f"relay/{provider_model}"
         if relay_candidate in known_refs:
@@ -247,6 +264,10 @@ def _classify_static_provider_model(provider_model: str | None, known_refs: set[
     if provider_model in known_refs:
         return "true", "exact_match_in_known_refs", provider_model
     suggested = _suggest_model_ref(provider_model, known_refs)
+    if provider_model.startswith("relay/") and suggested is not None:
+        stripped = provider_model[len("relay/"):]
+        if suggested == stripped or suggested.endswith(f"/{stripped}"):
+            return "true", f"canonical_alias_match={suggested}", suggested
     if suggested is not None:
         return "false", f"likely_match_suggested={suggested}", suggested
     return "false", "not_found_in_known_refs", None

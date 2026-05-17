@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import difflib
 import subprocess
+import hashlib
 
 
 def copy_tree(src: Path, dst: Path) -> None:
@@ -18,6 +19,16 @@ def _read_text(path: Path) -> list[str]:
         return path.read_text(encoding="utf-8").splitlines(keepends=True)
     except Exception:
         return []
+
+
+def _sha256_file(path: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def write_diff_patch(before_dir: Path, after_dir: Path, out_path: Path) -> None:
@@ -194,6 +205,8 @@ def _apply_openclaw_minimal_revision(
     model_id: str | None = None,
     provider_model: str | None = None,
     openclaw_agent_id: str | None = None,
+    retry_on_noop: bool = False,
+    feedback_artifact_paths: list[str] | None = None,
 ) -> tuple[bool, str]:
     old_aggression = _read_aggression(submission_main_path)
     previous_round = round_idx - 1
@@ -260,6 +273,12 @@ def _apply_openclaw_minimal_revision(
         runner_cmd.extend(["--model-id", model_id])
     if provider_model:
         runner_cmd.extend(["--provider-model", provider_model])
+    if retry_on_noop:
+        runner_cmd.append("--retry-on-noop")
+    if isinstance(feedback_artifact_paths, list):
+        for p in feedback_artifact_paths:
+            if isinstance(p, str) and p.strip():
+                runner_cmd.extend(["--artifact-path", p])
     proc = subprocess.run(
         runner_cmd,
         capture_output=True,
@@ -347,6 +366,9 @@ def apply_minimal_revision(
     executor: str | None = None,
     openclaw_agent_id: str | None = None,
     provider_model: str | None = None,
+    require_effective_submission_change: bool = False,
+    revision_retry_on_noop: int = 0,
+    feedback_artifact_paths: list[str] | None = None,
 ) -> tuple[bool, str]:
     copy_tree(codebase_play_dir, codebase_post_dir)
 
@@ -398,19 +420,36 @@ def apply_minimal_revision(
     # OpenClaw is selected whenever executor is openclaw-minimal or agent id is provided.
     use_openclaw_minimal = bool(openclaw_agent_id) or executor == "openclaw-minimal"
     if use_openclaw_minimal:
-        return _apply_openclaw_minimal_revision(
-            codebase_post_dir=codebase_post_dir,
-            submission_main_path=submission_main_path,
-            round_idx=round_idx,
-            side=side,
-            game=game,
-            regime=regime,
-            previous_winner=previous_winner,
-            log_path=log_path,
-            model_id=model_id,
-            provider_model=provider_model,
-            openclaw_agent_id=openclaw_agent_id,
-        )
+        retries = max(0, int(revision_retry_on_noop or 0)) if require_effective_submission_change else 0
+        before_hash = _sha256_file(submission_main_path)
+        last_msg = "openclaw-minimal revision failed: unknown error"
+        for attempt in range(retries + 1):
+            ok, msg = _apply_openclaw_minimal_revision(
+                codebase_post_dir=codebase_post_dir,
+                submission_main_path=submission_main_path,
+                round_idx=round_idx,
+                side=side,
+                game=game,
+                regime=regime,
+                previous_winner=previous_winner,
+                log_path=log_path,
+                model_id=model_id,
+                provider_model=provider_model,
+                openclaw_agent_id=openclaw_agent_id,
+                retry_on_noop=attempt > 0,
+                feedback_artifact_paths=feedback_artifact_paths,
+            )
+            last_msg = msg
+            if not ok:
+                return ok, msg
+            if not require_effective_submission_change:
+                return ok, msg
+            after_hash = _sha256_file(submission_main_path)
+            if before_hash != after_hash:
+                return ok, msg
+            if attempt < retries:
+                continue
+        return False, "OpenClaw revision made no effective submission/main.py change"
 
     return _apply_rule_revision(
         submission_main_path=submission_main_path,
