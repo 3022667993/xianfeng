@@ -245,3 +245,10 @@ def test_adaptive_3round_audit_fails_when_effective_change_required_but_missing(
     rp.write_text(json.dumps(rev), encoding="utf-8")
     errors, _warnings = audit_openclaw_adaptive_3round_smoke(tournament)
     assert any("require_effective_submission_change=true" in e for e in errors)
+
+
+def test_initial_synthesis_3round_audit_requires_initial_propagation_manifest(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tournament = _mk_fixture(tmp_path, tournament="pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke")
+    errors, _warnings = audit_openclaw_adaptive_3round_smoke(tournament)
+    assert any("missing logs/round_1/initial_propagation_manifest.json" in e for e in errors)

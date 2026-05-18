@@ -87,6 +87,9 @@ def test_build_trajectory_summary_and_agent_feedback(tmp_path):
     assert fb["result_summary"]["wins"] == 2
     assert fb["source_files"]["trajectory_summary"].endswith("trajectory_summary.json")
     assert any("seat-swap instability" in h for h in fb["next_round_hints"])
+    diag = fb.get("diagnostics", {})
+    for k in ["bomb_action_rate", "stop_action_rate", "average_terminal_step", "non_draw_match_count"]:
+        assert k in diag
 
 
 def test_stable_draw_draw_has_neutral_seat_swap_hint(tmp_path):

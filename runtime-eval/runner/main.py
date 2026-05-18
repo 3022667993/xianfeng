@@ -11,7 +11,7 @@ from runner.adapters.registry import get_adapter
 from runner.core.artifacts import ensure_round_dir, write_json
 from runner.core.config import load_yaml, require_keys
 from runner.core.fsops import copy_tree
-from runner.core.revision import apply_minimal_revision, apply_noop_revision, write_diff_patch
+from runner.core.revision import apply_minimal_initial_synthesis, apply_minimal_revision, apply_noop_revision, write_diff_patch
 from runner.core.schedule import build_two_cycle_schedule
 from runner.core.pommerman_feedback import write_feedback_artifact_mirrors, write_process_feedback
 
@@ -349,6 +349,49 @@ def _collect_submission_change_fields(
     }
 
 
+def _extract_openclaw_route_provenance(audit_payload: dict | None) -> tuple[str, str | None, str | None, bool]:
+    ad = audit_payload if isinstance(audit_payload, dict) else {}
+    provider_route_status = ad.get("providerRouteStatus", "unknown")
+    if not isinstance(provider_route_status, str) or not provider_route_status:
+        provider_route_status = "unknown"
+    actual_provider = ad.get("actualProvider")
+    if not isinstance(actual_provider, str) or not actual_provider.strip():
+        actual_provider = None
+    actual_model = ad.get("actualModel")
+    if not isinstance(actual_model, str) or not actual_model.strip():
+        actual_model = None
+
+    fallback_used = False
+    fb = ad.get("fallbackUsed")
+    if isinstance(fb, bool):
+        fallback_used = fb
+    else:
+        oa = ad.get("openclawAudit")
+        if isinstance(oa, dict):
+            trace = oa.get("executionTrace")
+            if isinstance(trace, dict) and isinstance(trace.get("fallbackUsed"), bool):
+                fallback_used = bool(trace.get("fallbackUsed"))
+    return provider_route_status, actual_provider, actual_model, fallback_used
+
+
+def _route_provenance_verified(
+    *,
+    provider_route_status: str,
+    actual_provider: str | None,
+    actual_model: str | None,
+    fallback_used: bool,
+) -> bool:
+    if provider_route_status != "matched":
+        return False
+    if not isinstance(actual_provider, str) or not actual_provider.strip():
+        return False
+    if not isinstance(actual_model, str) or not actual_model.strip():
+        return False
+    if fallback_used:
+        return False
+    return True
+
+
 def _roster_entries(roster_models: list[dict]) -> list[dict]:
     entries: list[dict] = []
     for idx, entry in enumerate(roster_models, start=1):
@@ -369,6 +412,45 @@ def _roster_entries(roster_models: list[dict]) -> list[dict]:
             }
         )
     return entries
+
+
+def _initial_strategy_profiles() -> dict[str, tuple[str, str]]:
+    return {
+        "relay_bailian_deepseek_v4_flash": (
+            "cautious_center_explore",
+            "Prioritize cautious survival and controlled center exploration while avoiding unnecessary bomb risk.",
+        ),
+        "relay_gemini_2_5_flash_thinking": (
+            "powerup_wood_clear",
+            "Prioritize safe powerup collection and purposeful wood clearing with deterministic movement choices.",
+        ),
+        "relay_deepseek_v3": (
+            "tactical_safe_bombing",
+            "Use tactical bombing to create advantage, but only when an explicit safe escape path exists.",
+        ),
+        "relay_qwen3_5_plus": (
+            "safe_opponent_pressure",
+            "Apply opponent pressure when safe by reducing distance and contesting space without reckless commits.",
+        ),
+        "relay_glm_4_6": (
+            "mobility_deadend_avoidance",
+            "Maximize mobility and avoid dead ends, preferring routes that preserve multiple escape options.",
+        ),
+        "relay_glm_4_7": (
+            "balanced_aggressive_control",
+            "Balance survivability with proactive board control using measured aggression and safe tempo.",
+        ),
+    }
+
+
+def _get_initial_strategy_profile(agent_id: str) -> tuple[str, str]:
+    profiles = _initial_strategy_profiles()
+    if agent_id in profiles:
+        return profiles[agent_id]
+    return (
+        "balanced_default",
+        "Balanced deterministic strategy with survival priority and safe proactive movement.",
+    )
 
 
 def _run_execution_smoke_tournament(
@@ -1102,9 +1184,253 @@ def _run_openclaw_adaptive_smoke_tournament(
     openclaw_runner_agent_id = str(tournament.get("openclaw_runner_agent_id", "main"))
     require_effective_submission_change = bool(tournament.get("require_effective_submission_change", False))
     revision_retry_on_noop = int(tournament.get("revision_retry_on_noop", 0) or 0)
+    initial_synthesis = bool(tournament.get("initial_synthesis", False))
+    real_openclaw_initial_synthesis = bool(tournament.get("real_openclaw_initial_synthesis", False))
+    initial_synthesis_executor = str(tournament.get("initial_synthesis_executor", "openclaw-minimal"))
+    require_all_agents_initial_synthesized = bool(tournament.get("require_all_agents_initial_synthesized", False))
+    require_effective_initial_submission_change = bool(tournament.get("require_effective_initial_submission_change", False))
+    initial_synthesis_retry_on_noop = int(tournament.get("initial_synthesis_retry_on_noop", 0) or 0)
+    initial_synthesis_retry_on_route_unknown = int(tournament.get("initial_synthesis_retry_on_route_unknown", 0) or 0)
+    revision_retry_on_route_unknown = int(tournament.get("revision_retry_on_route_unknown", 0) or 0)
+    initial_synthesis_prompt_variant = str(tournament.get("initial_synthesis_prompt_variant", "anti_draw_coached"))
+    revision_prompt_variant = str(tournament.get("revision_prompt_variant", "anti_draw_coached"))
+    valid_prompt_variants = {"anti_draw_coached", "neutral"}
+    if initial_synthesis_prompt_variant not in valid_prompt_variants:
+        raise ValueError(
+            f"unsupported initial_synthesis_prompt_variant={initial_synthesis_prompt_variant}; "
+            "expected one of ['anti_draw_coached', 'neutral']"
+        )
+    if revision_prompt_variant not in valid_prompt_variants:
+        raise ValueError(
+            f"unsupported revision_prompt_variant={revision_prompt_variant}; "
+            "expected one of ['anti_draw_coached', 'neutral']"
+        )
 
     latest_post_by_agent: dict[str, Path] = {}
     revision_manifests_by_round: dict[int, dict[str, dict]] = {}
+
+    if initial_synthesis:
+        if not real_openclaw_initial_synthesis:
+            raise ValueError("initial_synthesis=true requires real_openclaw_initial_synthesis=true")
+        logs_root = Path("logs")
+        logs_root.mkdir(parents=True, exist_ok=True)
+        initial_manifest_entries: list[dict] = []
+        initial_round_one_propagation_entries: list[dict] = []
+        starter_submission_path = starter_repo / "submission" / "main.py"
+        starter_submission_sha256 = _sha256_file(starter_submission_path)
+        failed_initial_entries: list[dict] = []
+
+        for agent_id in agent_ids:
+            meta = model_by_agent[agent_id]
+            provider_model = meta.get("provider_model")
+            executor = initial_synthesis_executor or meta.get("executor")
+            initial_base = Path("workspace/codebases") / tournament_name / agent_id / "codebase_initial_base_0"
+            initial_post = Path("workspace/posts") / tournament_name / agent_id / "codebase_initial_post_0"
+            play_1 = Path("workspace/codebases") / tournament_name / agent_id / "codebase_play_1"
+            initial_diff_path = Path("logs") / f"initial_synthesis_{agent_id}.diff.patch"
+            copy_tree(starter_repo, initial_base)
+            strategy_profile_id, strategy_profile_text = _get_initial_strategy_profile(agent_id)
+            route_retry_budget = max(initial_synthesis_retry_on_route_unknown, initial_synthesis_retry_on_noop)
+            attempt_count = 0
+            ok = False
+            msg = "initial synthesis failed"
+            requested_provider_model = provider_model
+            actual_provider = None
+            actual_model = None
+            provider_route_status = "unknown"
+            fallback_used = False
+            changed_files_reported_by_openclaw: list[str] = []
+            ignored_changed_files: list[str] = []
+            disallowed_changed_files: list[str] = []
+            audit_errors: list[str] = []
+            starter_hash = _sha256_file(initial_base / "submission" / "main.py")
+            initial_hash = _sha256_file(initial_post / "submission" / "main.py")
+            effective_initial_changed = False
+            initial_changed_files_hash_based: list[str] = []
+            failure_reason = None
+            initial_synthesis_ok = False
+
+            for attempt in range(route_retry_budget + 1):
+                attempt_count = attempt + 1
+                ok, msg = apply_minimal_initial_synthesis(
+                    initial_base,
+                    initial_post,
+                    game=tournament["game"],
+                    regime=regime["name"],
+                    model_id=meta["id"],
+                    executor=executor,
+                    openclaw_agent_id=openclaw_runner_agent_id,
+                    provider_model=provider_model,
+                    require_effective_submission_change=require_effective_initial_submission_change,
+                    initial_synthesis_retry_on_noop=initial_synthesis_retry_on_noop,
+                    strategy_profile_id=strategy_profile_id,
+                    strategy_profile_text=strategy_profile_text,
+                    prompt_variant=initial_synthesis_prompt_variant,
+                )
+                write_diff_patch(initial_base, initial_post, initial_diff_path)
+                initial_audit_json = initial_post / "revision_audit.json"
+                requested_provider_model = provider_model
+                actual_provider = None
+                actual_model = None
+                provider_route_status = "unknown"
+                fallback_used = False
+                changed_files_reported_by_openclaw = []
+                ignored_changed_files = []
+                disallowed_changed_files = []
+                audit_errors = []
+                audit_payload: dict | None = None
+                if initial_audit_json.exists():
+                    try:
+                        audit_payload = json.loads(initial_audit_json.read_text(encoding="utf-8"))
+                        requested_provider_model = audit_payload.get("requestedProviderModel", requested_provider_model)
+                        changed_files_reported_by_openclaw = audit_payload.get("changedFiles", []) or []
+                        ignored_changed_files = audit_payload.get("ignoredChangedFiles", []) or []
+                        disallowed_changed_files = audit_payload.get("disallowedChangedFiles", []) or []
+                        audit_errors = audit_payload.get("errors", []) or []
+                    except Exception as exc:
+                        audit_errors = [f"failed_to_read_revision_audit:{exc!r}"]
+                provider_route_status, actual_provider, actual_model, fallback_used = _extract_openclaw_route_provenance(
+                    audit_payload
+                )
+                route_provenance_verified = _route_provenance_verified(
+                    provider_route_status=provider_route_status,
+                    actual_provider=actual_provider,
+                    actual_model=actual_model,
+                    fallback_used=fallback_used,
+                )
+
+                starter_hash = _sha256_file(initial_base / "submission" / "main.py")
+                initial_hash = _sha256_file(initial_post / "submission" / "main.py")
+                effective_initial_changed = starter_hash != initial_hash
+                initial_changed_files_hash_based = ["submission/main.py"] if effective_initial_changed else []
+                initial_synthesis_ok = bool(ok) and route_provenance_verified
+                if require_effective_initial_submission_change and not effective_initial_changed:
+                    initial_synthesis_ok = False
+                    failure_reason = "OpenClaw initial synthesis made no effective submission/main.py change"
+                elif not bool(ok):
+                    failure_reason = msg
+                elif not route_provenance_verified and effective_initial_changed:
+                    failure_reason = "OpenClaw route provenance missing despite code change"
+                elif not route_provenance_verified:
+                    failure_reason = "OpenClaw route provenance missing"
+                else:
+                    failure_reason = None
+                if route_provenance_verified is False and fallback_used:
+                    failure_reason = "OpenClaw fallback used during initial synthesis"
+
+                if initial_synthesis_ok:
+                    break
+                if (
+                    (not route_provenance_verified)
+                    and attempt < route_retry_budget
+                ):
+                    continue
+                break
+
+            initial_entry = {
+                "agent_id": agent_id,
+                "model_id": meta["id"],
+                "provider_model": provider_model,
+                "executor": executor,
+                "starter_submission_sha256": starter_hash if starter_hash is not None else starter_submission_sha256,
+                "initial_submission_sha256": initial_hash,
+                "effective_initial_submission_changed": effective_initial_changed,
+                "initial_changed_files_hash_based": initial_changed_files_hash_based,
+                "initial_provider_route_status": provider_route_status,
+                "initial_requested_provider_model": requested_provider_model,
+                "initial_actual_provider": actual_provider,
+                "initial_actual_model": actual_model,
+                "initial_fallback_used": fallback_used,
+                "initial_strategy_profile_id": strategy_profile_id,
+                "initial_strategy_profile_text": strategy_profile_text,
+                "initial_synthesis_prompt_variant": initial_synthesis_prompt_variant,
+                "initial_openclaw_invoked": True,
+                "initial_synthesis_ok": initial_synthesis_ok,
+                "initial_failure_reason": failure_reason,
+                "initial_diff_path": str(initial_diff_path),
+                "initial_diff_bytes": initial_diff_path.stat().st_size if initial_diff_path.exists() else 0,
+                "initial_ignored_changed_files": ignored_changed_files,
+                "initial_disallowed_changed_files": disallowed_changed_files,
+                "initial_changed_files_reported_by_openclaw": changed_files_reported_by_openclaw,
+                "initial_audit_errors": audit_errors,
+                "initial_attempt_count": attempt_count,
+                "codebase_initial_base_path": str(initial_base),
+                "codebase_initial_post_path": str(initial_post),
+                "codebase_play_1_path": str(play_1),
+            }
+            initial_manifest_entries.append(initial_entry)
+
+            if not initial_synthesis_ok:
+                failed_initial_entries.append(initial_entry)
+                source_submission_sha256 = _sha256_file(initial_post / "submission" / "main.py")
+                initial_round_one_propagation_entries.append(
+                    {
+                        "agent_id": agent_id,
+                        "source_initial_post_path": str(initial_post),
+                        "target_play_path": str(play_1),
+                        "source_round": 0,
+                        "target_round": 1,
+                        "source_submission_sha256": source_submission_sha256,
+                        "target_submission_sha256": None,
+                        "propagation_matches_post": False,
+                        "propagated": False,
+                        "propagation_ok": False,
+                    }
+                )
+                continue
+
+            copy_tree(initial_post, play_1)
+            source_submission_sha256 = _sha256_file(initial_post / "submission" / "main.py")
+            target_submission_sha256 = _sha256_file(play_1 / "submission" / "main.py")
+            initial_round_one_propagation_entries.append(
+                {
+                    "agent_id": agent_id,
+                    "source_initial_post_path": str(initial_post),
+                    "target_play_path": str(play_1),
+                    "source_round": 0,
+                    "target_round": 1,
+                    "source_submission_sha256": source_submission_sha256,
+                    "target_submission_sha256": target_submission_sha256,
+                    "propagation_matches_post": source_submission_sha256 == target_submission_sha256,
+                    "propagated": True,
+                    "propagation_ok": source_submission_sha256 == target_submission_sha256,
+                }
+            )
+
+        write_json(
+            Path("logs/initial_synthesis_manifest.json"),
+            {
+                "tournament": tournament_name,
+                "initial_synthesis": True,
+                "real_openclaw_initial_synthesis": real_openclaw_initial_synthesis,
+                "require_all_agents_initial_synthesized": require_all_agents_initial_synthesized,
+                "require_effective_initial_submission_change": require_effective_initial_submission_change,
+                "initial_synthesis_retry_on_noop": initial_synthesis_retry_on_noop,
+                "initial_synthesis_retry_on_route_unknown": initial_synthesis_retry_on_route_unknown,
+                "agents": initial_manifest_entries,
+            },
+        )
+        write_json(
+            Path("logs/round_1/initial_propagation_manifest.json"),
+            {
+                "round_idx": 1,
+                "agents": initial_round_one_propagation_entries,
+            },
+        )
+        if require_all_agents_initial_synthesized and failed_initial_entries:
+            reasons = "; ".join(
+                f"{x['agent_id']}:{x.get('initial_failure_reason') or 'initial synthesis failed'}"
+                for x in failed_initial_entries
+            )
+            raise RuntimeError(f"initial synthesis failed for required agents: {reasons}")
+        for rec in initial_round_one_propagation_entries:
+            if not bool(rec.get("propagation_matches_post", False)):
+                raise RuntimeError(f"initial propagation hash mismatch for agent {rec.get('agent_id')}")
+        latest_post_by_agent = {
+            agent_id: Path("workspace/posts") / tournament_name / agent_id / "codebase_initial_post_0"
+            for agent_id in agent_ids
+            if (Path("workspace/posts") / tournament_name / agent_id / "codebase_initial_post_0").exists()
+        }
 
     for round_pos, round_info in enumerate(rounds, start=1):
         round_idx = int(round_info["round_idx"])
@@ -1227,6 +1553,8 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
                 "left_submission_path": str(left_submission),
                 "right_submission_path": str(right_submission),
+                "left_source_path": str(left_source),
+                "right_source_path": str(right_source),
                 "left_export_ok": left_export_ok,
                 "left_export_msg": left_export_msg,
                 "right_export_ok": right_export_ok,
@@ -1283,6 +1611,12 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "revision_executor": "openclaw-minimal",
                 "require_effective_submission_change": require_effective_submission_change,
                 "revision_retry_on_noop": revision_retry_on_noop,
+                "revision_retry_on_route_unknown": revision_retry_on_route_unknown,
+                "revision_prompt_variant": revision_prompt_variant,
+                "initial_synthesis": initial_synthesis,
+                "real_openclaw_initial_synthesis": real_openclaw_initial_synthesis,
+                "initial_synthesis_executor": initial_synthesis_executor if initial_synthesis else None,
+                "initial_synthesis_prompt_variant": initial_synthesis_prompt_variant if initial_synthesis else None,
                 "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
                 "background_agents": ["dummy2", "dummy3"],
                 "matches": round_matches,
@@ -1320,54 +1654,97 @@ def _run_openclaw_adaptive_smoke_tournament(
                             str(match_dir / f"agent_feedback_{agent_id}.md"),
                         ]
                     )
-                rev_ok, rev_msg = apply_minimal_revision(
-                    codebase,
-                    post,
-                    round_idx + 1,
-                    "left",
-                    game=tournament["game"],
-                    regime=regime["name"],
-                    model_id=meta["id"],
-                    executor=executor,
-                    openclaw_agent_id=openclaw_runner_agent_id,
-                    provider_model=provider_model,
-                    require_effective_submission_change=require_effective_submission_change,
-                    revision_retry_on_noop=revision_retry_on_noop,
-                    feedback_artifact_paths=feedback_artifact_paths,
-                )
-                write_diff_patch(codebase, post, diff_path)
-                audit_json = post / "revision_audit.json"
+                route_retry_budget = max(revision_retry_on_route_unknown, revision_retry_on_noop)
+                rev_ok = False
+                rev_msg = "openclaw revision failed"
                 requested_provider_model = provider_model
                 actual_provider = None
                 actual_model = None
                 provider_route_status = "unknown"
+                fallback_used = False
                 default_missing_placeholders: list[str] = []
                 audit_warnings: list[str] = []
                 audit_errors: list[str] = []
                 changed_files_reported_by_openclaw: list[str] = []
-                if audit_json.exists():
-                    try:
-                        ad = json.loads(audit_json.read_text(encoding="utf-8"))
-                        requested_provider_model = ad.get("requestedProviderModel", requested_provider_model)
-                        actual_provider = ad.get("actualProvider")
-                        actual_model = ad.get("actualModel")
-                        provider_route_status = ad.get("providerRouteStatus", "unknown")
-                        default_missing_placeholders = ad.get("openclawDefaultMissingPlaceholders", []) or []
-                        changed_files_reported_by_openclaw = ad.get("changedFiles", []) or []
-                        audit_errors = ad.get("errors", []) or []
-                    except Exception as exc:
-                        audit_errors = [f"failed_to_read_revision_audit:{exc!r}"]
-                if provider_route_status == "unknown":
-                    audit_warnings.append("provider_route_unknown")
-                revision_change_fields = _collect_submission_change_fields(
-                    codebase=codebase,
-                    post=post,
-                    diff_path=diff_path,
-                    changed_files_reported_by_openclaw=changed_files_reported_by_openclaw,
-                )
-                effective_change = bool(revision_change_fields["effective_submission_changed"])
+                revision_change_fields: dict = {}
+                effective_change = False
+                route_provenance_verified = False
+                attempt_count = 0
+                failure_reason = None
+
+                for attempt in range(route_retry_budget + 1):
+                    attempt_count = attempt + 1
+                    rev_ok, rev_msg = apply_minimal_revision(
+                        codebase,
+                        post,
+                        round_idx + 1,
+                        "left",
+                        game=tournament["game"],
+                        regime=regime["name"],
+                        model_id=meta["id"],
+                        executor=executor,
+                        openclaw_agent_id=openclaw_runner_agent_id,
+                        provider_model=provider_model,
+                        require_effective_submission_change=require_effective_submission_change,
+                        revision_retry_on_noop=revision_retry_on_noop,
+                        feedback_artifact_paths=feedback_artifact_paths,
+                        prompt_variant=revision_prompt_variant,
+                    )
+                    write_diff_patch(codebase, post, diff_path)
+                    audit_json = post / "revision_audit.json"
+                    requested_provider_model = provider_model
+                    actual_provider = None
+                    actual_model = None
+                    provider_route_status = "unknown"
+                    default_missing_placeholders = []
+                    audit_warnings = []
+                    audit_errors = []
+                    changed_files_reported_by_openclaw = []
+                    audit_payload: dict | None = None
+                    if audit_json.exists():
+                        try:
+                            audit_payload = json.loads(audit_json.read_text(encoding="utf-8"))
+                            requested_provider_model = audit_payload.get("requestedProviderModel", requested_provider_model)
+                            default_missing_placeholders = audit_payload.get("openclawDefaultMissingPlaceholders", []) or []
+                            changed_files_reported_by_openclaw = audit_payload.get("changedFiles", []) or []
+                            audit_errors = audit_payload.get("errors", []) or []
+                        except Exception as exc:
+                            audit_errors = [f"failed_to_read_revision_audit:{exc!r}"]
+                    provider_route_status, actual_provider, actual_model, fallback_used = _extract_openclaw_route_provenance(
+                        audit_payload
+                    )
+                    route_provenance_verified = _route_provenance_verified(
+                        provider_route_status=provider_route_status,
+                        actual_provider=actual_provider,
+                        actual_model=actual_model,
+                        fallback_used=fallback_used,
+                    )
+                    if provider_route_status == "unknown":
+                        audit_warnings.append("provider_route_unknown")
+                    revision_change_fields = _collect_submission_change_fields(
+                        codebase=codebase,
+                        post=post,
+                        diff_path=diff_path,
+                        changed_files_reported_by_openclaw=changed_files_reported_by_openclaw,
+                    )
+                    effective_change = bool(revision_change_fields["effective_submission_changed"])
+                    if rev_ok and effective_change and not route_provenance_verified:
+                        failure_reason = "OpenClaw route provenance missing despite code change"
+                        if attempt < route_retry_budget:
+                            continue
+                        rev_ok = False
+                        rev_msg = failure_reason
+                    if rev_ok and not route_provenance_verified and fallback_used:
+                        failure_reason = "OpenClaw fallback used during revision"
+                        if attempt < route_retry_budget:
+                            continue
+                        rev_ok = False
+                        rev_msg = failure_reason
+                    break
+
                 revision_status = "ok" if rev_ok else "failed"
-                failure_reason = None if rev_ok else rev_msg
+                if failure_reason is None:
+                    failure_reason = None if rev_ok else rev_msg
                 no_effect_msg = "OpenClaw revision made no effective submission/main.py change"
                 if require_effective_submission_change and ((rev_ok and not effective_change) or (not rev_ok and rev_msg == no_effect_msg)):
                     revision_status = "no_effect"
@@ -1390,14 +1767,16 @@ def _run_openclaw_adaptive_smoke_tournament(
                     "failure_reason": failure_reason,
                     "budget_guard_reason": None,
                     "openclaw_invoked": True,
-                    "fallback_used": False,
+                    "fallback_used": fallback_used,
                     "requested_provider_model": requested_provider_model,
                     "actual_provider": actual_provider,
                     "actual_model": actual_model,
                     "provider_route_status": provider_route_status,
+                    "revision_prompt_variant": revision_prompt_variant,
                     "openclaw_default_missing_placeholders": default_missing_placeholders,
                     "audit_warnings": audit_warnings,
                     "audit_errors": audit_errors,
+                    "revision_attempt_count": attempt_count,
                     **revision_change_fields,
                 }
                 latest_post_by_agent[agent_id] = post
@@ -1407,6 +1786,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                 {
                     "require_effective_submission_change": require_effective_submission_change,
                     "revision_retry_on_noop": revision_retry_on_noop,
+                    "revision_retry_on_route_unknown": revision_retry_on_route_unknown,
                     "agents": [revision_manifest_for_round[a] for a in agent_ids],
                 },
             )

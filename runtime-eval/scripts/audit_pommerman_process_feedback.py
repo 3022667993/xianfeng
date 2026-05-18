@@ -106,6 +106,11 @@ def audit_process_feedback(logs_root: Path = Path("logs")) -> tuple[list[str], l
                 for token in UNSUPPORTED_TICK_CLAIMS:
                     if token in as_text:
                         errors.append(f"{jf}: unsupported tick-level claim token found: {token}")
+                diag = payload.get("diagnostics", {})
+                if isinstance(diag, dict):
+                    for k in ["bomb_action_rate", "stop_action_rate", "average_terminal_step", "non_draw_match_count"]:
+                        if k not in diag:
+                            errors.append(f"{jf}: missing diagnostics.{k}")
             for mf in md_files:
                 txt = mf.read_text(encoding="utf-8").lower()
                 for token in UNSUPPORTED_TICK_CLAIMS:

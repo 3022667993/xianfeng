@@ -17,6 +17,7 @@ Included:
 - OpenClaw route validation
 - Real OpenClaw-Minimal revision smokes (single-agent and all-agent, both 1-round)
 - 2-round real OpenClaw adaptive smoke
+- 3-round real OpenClaw adaptive smoke with initial synthesis
 - Pommerman seed control applied via `env.seed(...)`
 - Compact trajectory v2 has run
 
@@ -167,6 +168,40 @@ Not included:
 - A model may make small changes or no meaningful code change.
 - Audits verify invocation, provider route, `fallback_used=false`, and `revision_ok`.
 - Audits do not require a forced code diff in every round.
+
+13. Initial synthesis + route provenance enforcement
+- New smoke config:
+  - `configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke.yaml`
+  - `configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_smoke.yaml`
+- Pre-round initial synthesis:
+  - each agent runs real OpenClaw-Minimal on starter repo to produce `codebase_initial_post_0`
+  - round_1 uses propagated `codebase_play_1` from `codebase_initial_post_0`
+- Accepted initial synthesis requires:
+  - `initial_provider_route_status=matched`
+  - non-empty `initial_actual_provider` and `initial_actual_model`
+  - `initial_fallback_used=false`
+  - effective `submission/main.py` change when required by config
+- If route provenance is unknown:
+  - result is unverified and not propagated
+  - failure reason is recorded
+  - retry can run from clean starter/base copy via:
+    - `initial_synthesis_retry_on_route_unknown`
+    - `revision_retry_on_route_unknown`
+
+14. Prompt variants (engineering vs formal-style)
+- OpenClaw revision/initial synthesis prompts are necessary to supply objective, artifact context, and constraints.
+- Prompt specificity is configurable:
+  - `initial_synthesis_prompt_variant`
+  - `revision_prompt_variant`
+- Supported values:
+  - `anti_draw_coached`
+  - `neutral`
+- `anti_draw_coached` is intended for engineering smoke checks and includes explicit anti-draw tactical suggestions.
+- `neutral` is closer to formal CodeClash-style revision framing:
+  - objective + constraints + artifact usage
+  - effective code-change requirement
+  - avoids tactical prescriptions (no specific center/wood/powerup/opponent-pressure/STOP heuristics)
+- Full 10-round real OpenClaw adaptive run remains future work.
 
 ## 3) Current Route-Valid 6-Agent Roster
 Config:

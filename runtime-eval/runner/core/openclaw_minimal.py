@@ -249,6 +249,7 @@ def _make_revision_message(
     regime: str,
     retry_on_noop: bool = False,
     extra_artifact_paths: list[str] | None = None,
+    prompt_variant: str = "anti_draw_coached",
 ) -> str:
     retry_suffix = ""
     if retry_on_noop:
@@ -266,7 +267,7 @@ def _make_revision_message(
                 rendered.append(f"  - {p}")
         if rendered:
             extra_artifacts_block = "  - additional round artifacts provided by runner:\n" + "\n".join(rendered) + "\n"
-    return f"""You are OpenClaw-Minimal running inside a controlled runtime-eval revision executor.
+    prefix = f"""You are OpenClaw-Minimal running inside a controlled runtime-eval revision executor.
 
 IMPORTANT:
 You are in a constrained one-shot revision smoke.
@@ -308,11 +309,125 @@ Task:
 - notes/revision_log.md alone does not count as a valid revision.
 - Keep submission runnable.
 - Make a small, concrete strategy change based on feedback.
-- If all games are 800-step draws, make the agent less purely passive while preserving survival.
-{retry_suffix}
+"""
+    if prompt_variant == "anti_draw_coached":
+        variant_block = """- Treat 800-step draw outcomes as a failure signal.
+- The objective is to increase non-draw win probability, not only survival.
+- If the previous round was all draws, you must make a concrete anti-draw strategy change in submission/main.py.
+- Encourage safe aggression while preserving survival:
+  - move toward center when safe
+  - clear wood for powerups
+  - use bombs when an escape path exists
+  - pressure opponent when nearby and safe
+  - avoid endless corner camping
+  - reduce STOP usage unless unsafe
+- Keep survival safeguards strict; do not add suicidal aggression.
+- In your final response, explicitly state:
+  - what anti-draw behavior was added
+  - what safety guard prevents suicide
+"""
+    elif prompt_variant == "neutral":
+        variant_block = """- Objective: improve expected future match performance under the provided artifacts and constraints.
+- If previous matches ended in draw, make a concrete code change intended to improve win probability or reduce draw rate.
+- Preserve survival guarantees and avoid self-destructive behavior.
+- Keep changes functional and behaviorally meaningful; do not submit only refactors, renames, or comments.
+"""
+    else:
+        raise ValueError(f"unsupported prompt_variant: {prompt_variant}")
+    return prefix + variant_block + f"""{retry_suffix}
 
 In your final response, briefly state what you changed.
 """
+
+
+def _make_initial_synthesis_message(
+    *,
+    bootstrap_text: str,
+    run_dir: Path,
+    codebase_post_t_dir: Path,
+    game: str,
+    regime: str,
+    retry_on_noop: bool = False,
+    strategy_profile_id: str | None = None,
+    strategy_profile_text: str | None = None,
+    prompt_variant: str = "anti_draw_coached",
+) -> str:
+    retry_suffix = ""
+    if retry_on_noop:
+        retry_suffix = (
+            "\nRetry requirement:\n"
+            "- Previous attempt made no submitted-code change.\n"
+            "- You must edit submission/main.py.\n"
+            "- Do not only write notes or audit files.\n"
+        )
+    profile_id = strategy_profile_id or "default_profile"
+    profile_text = strategy_profile_text or "balanced survivability and safe progression"
+    prefix = f"""You are OpenClaw-Minimal running inside a controlled runtime-eval initial synthesis executor.
+
+IMPORTANT:
+You are in a constrained one-shot initial synthesis smoke.
+Do not use web tools.
+Do not use subagents or session tools.
+Do not run shell commands in this run.
+Do not write memory notes, analysis logs, test logs, or extra artifacts.
+Only modify the allowed file listed below.
+
+Experiment:
+- game: {game}
+- regime: {regime}
+- run_dir: {run_dir}
+- codebase_post_t_dir: {codebase_post_t_dir}
+- initial synthesis mode: no match feedback is available yet
+- assigned strategy profile id: {profile_id}
+- assigned strategy profile: {profile_text}
+
+Bootstrap contract:
+{bootstrap_text}
+
+Task:
+- You are creating the first Pommerman agent from the shared starter repo.
+- This agent has a distinct assigned strategy profile.
+- Implement the assigned strategy profile in submission/main.py.
+- Do not copy a generic template unchanged.
+- The submitted code should be meaningfully different from the starter and should reflect the assigned profile.
+- Inspect bot code at: {codebase_post_t_dir / "submission/main.py"}
+- Only modify: {codebase_post_t_dir / "submission/main.py"}
+- Keep the public agent API unchanged and runnable.
+- Implement a deterministic, survivable, non-passive strategy.
+"""
+    if prompt_variant == "anti_draw_coached":
+        variant_block = """- Treat 800-step draw behavior as a failure mode to avoid in design.
+- Maximize chance of non-draw wins while preserving survival and deterministic behavior.
+- Encode explicit anti-draw behavior:
+  - move toward center when safe
+  - clear wood for powerups
+  - use bombs when an escape path exists
+  - pressure nearby opponents when safe
+  - avoid endless corner camping
+  - reduce STOP usage unless unsafe
+- In your final response, explicitly state:
+  - what anti-draw behavior was added
+  - what safety guard prevents suicide
+"""
+    elif prompt_variant == "neutral":
+        variant_block = """- Objective: improve expected future match performance while preserving determinism and survival constraints.
+- If early outcomes are likely to be draws, implement a concrete change intended to improve win probability or reduce draw rate.
+- Keep changes behaviorally meaningful; do not submit only refactors, renames, or comments.
+"""
+    else:
+        raise ValueError(f"unsupported prompt_variant: {prompt_variant}")
+    suffix = f"""- Handle missing observation fields defensively.
+- Avoid self-trapping.
+- Use bombs only with an escape path.
+- Ensure build/test/smoke compatibility.
+- Do not modify scripts/run_arena.sh, scripts/build.sh, tests, configs, or metadata files.
+- Do not rely on full board replay or hidden files.
+- Metadata-only edits do not count.
+- You must edit submission/main.py.
+- In your final response, briefly state what you changed.
+{retry_suffix}
+"""
+    return prefix + variant_block + suffix
 
 
 def _audit_openclaw_response(
@@ -470,9 +585,10 @@ def _extract_previous_winner(feedback_data: Any) -> str | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["revision", "initial_synthesis"], default="revision")
     parser.add_argument("--bootstrap", required=True)
     parser.add_argument("--codebase-post-dir", required=True)
-    parser.add_argument("--feedback-path", required=True)
+    parser.add_argument("--feedback-path", required=False)
     parser.add_argument("--side", required=True)
     parser.add_argument("--game", required=True)
     parser.add_argument("--regime", required=True)
@@ -483,14 +599,17 @@ def main() -> None:
     parser.add_argument("--model-id", required=False)
     parser.add_argument("--provider-model", required=False)
     parser.add_argument("--retry-on-noop", action="store_true")
+    parser.add_argument("--prompt-variant", choices=["anti_draw_coached", "neutral"], default="anti_draw_coached")
     parser.add_argument("--artifact-path", action="append", default=[])
+    parser.add_argument("--strategy-profile-id", required=False)
+    parser.add_argument("--strategy-profile-text", required=False)
     args = parser.parse_args()
 
     started_at = time.time()
 
     bootstrap_path = Path(args.bootstrap).resolve()
     codebase_post_dir = Path(args.codebase_post_dir).resolve()
-    feedback_path = Path(args.feedback_path).resolve()
+    feedback_path = Path(args.feedback_path).resolve() if args.feedback_path else None
     minimal_workspace = Path("/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal")
     runtime_runs_root = minimal_workspace / "runtime_eval_runs"
 
@@ -530,28 +649,49 @@ def main() -> None:
 
     try:
         bootstrap_text = bootstrap_path.read_text(encoding="utf-8")
-        feedback_data = json.loads(feedback_path.read_text(encoding="utf-8"))
-        previous_winner = _extract_previous_winner(feedback_data)
+        if args.mode == "revision":
+            if feedback_path is None:
+                raise ValueError("feedback_path is required in revision mode")
+            feedback_data = json.loads(feedback_path.read_text(encoding="utf-8"))
+            previous_winner = _extract_previous_winner(feedback_data)
+        else:
+            feedback_data = {"meta": {"round_idx": 0}, "scorecard": {"left_right_winner": "draw"}}
+            previous_winner = None
 
         run_dir.mkdir(parents=True, exist_ok=False)
         shutil.copytree(codebase_post_dir, run_codebase_post_t)
-        shutil.copy2(feedback_path, run_feedback_copy)
+        if feedback_path is not None:
+            shutil.copy2(feedback_path, run_feedback_copy)
         shutil.copytree(codebase_post_dir, run_backup_original)
 
         before_temp_snapshot = _snapshot_files(run_codebase_post_t)
         before_original_snapshot = _snapshot_files(codebase_post_dir)
 
-        message = _make_revision_message(
-            bootstrap_text=bootstrap_text,
-            run_dir=run_dir,
-            codebase_post_t_dir=run_codebase_post_t,
-            feedback_copy_path=run_feedback_copy,
-            side=args.side,
-            game=args.game,
-            regime=args.regime,
-            retry_on_noop=bool(args.retry_on_noop),
-            extra_artifact_paths=[str(x) for x in (args.artifact_path or [])],
-        )
+        if args.mode == "initial_synthesis":
+            message = _make_initial_synthesis_message(
+                bootstrap_text=bootstrap_text,
+                run_dir=run_dir,
+                codebase_post_t_dir=run_codebase_post_t,
+                game=args.game,
+                regime=args.regime,
+                retry_on_noop=bool(args.retry_on_noop),
+                strategy_profile_id=args.strategy_profile_id,
+                strategy_profile_text=args.strategy_profile_text,
+                prompt_variant=args.prompt_variant,
+            )
+        else:
+            message = _make_revision_message(
+                bootstrap_text=bootstrap_text,
+                run_dir=run_dir,
+                codebase_post_t_dir=run_codebase_post_t,
+                feedback_copy_path=run_feedback_copy,
+                side=args.side,
+                game=args.game,
+                regime=args.regime,
+                retry_on_noop=bool(args.retry_on_noop),
+                extra_artifact_paths=[str(x) for x in (args.artifact_path or [])],
+                prompt_variant=args.prompt_variant,
+            )
 
         response, stdout, stderr, returncode = _run_openclaw_agent(
             message,
@@ -615,7 +755,7 @@ def main() -> None:
 
         final_audit = {
             "executor": "openclaw-minimal",
-            "mode": "revision-executor",
+            "mode": "revision-executor" if args.mode == "revision" else "initial-synthesis-executor",
             "success": success,
             "errors": errors,
             "startedAtUnix": started_at,
@@ -633,8 +773,8 @@ def main() -> None:
             "regime": args.regime,
             "side": args.side,
             "bootstrapPath": str(bootstrap_path),
-            "feedbackPath": str(feedback_path),
-            "feedbackCopyPath": str(run_feedback_copy),
+            "feedbackPath": str(feedback_path) if feedback_path is not None else None,
+            "feedbackCopyPath": str(run_feedback_copy) if feedback_path is not None else None,
             "codebasePostDir": str(codebase_post_dir),
             "codebasePostTempDir": str(run_codebase_post_t),
             "feedbackRound": feedback_data.get("meta", {}).get("round_idx") if isinstance(feedback_data, dict) else None,
@@ -659,6 +799,7 @@ def main() -> None:
 
         result = {
             "executor": "openclaw-minimal",
+            "mode": args.mode,
             "success": success,
             "changed": changed,
             "changed_files": copy_back_changed_files if success else [],
@@ -688,7 +829,7 @@ def main() -> None:
         run_dir_file_list_before_cleanup = _list_files(run_dir)
         final_audit = {
             "executor": "openclaw-minimal",
-            "mode": "revision-executor",
+            "mode": "revision-executor" if args.mode == "revision" else "initial-synthesis-executor",
             "success": False,
             "errors": [repr(exc)],
             "startedAtUnix": started_at,
@@ -703,7 +844,7 @@ def main() -> None:
             "regime": args.regime,
             "side": args.side,
             "bootstrapPath": str(bootstrap_path),
-            "feedbackPath": str(feedback_path),
+            "feedbackPath": str(feedback_path) if feedback_path is not None else None,
             "previousWinner": previous_winner,
             "codebasePostDir": str(codebase_post_dir),
             "changedFiles": [],
@@ -715,6 +856,7 @@ def main() -> None:
             json.dumps(
                 {
                     "executor": "openclaw-minimal",
+                    "mode": args.mode,
                     "success": False,
                     "changed": False,
                     "changed_files": [],

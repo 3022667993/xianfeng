@@ -207,6 +207,7 @@ def _apply_openclaw_minimal_revision(
     openclaw_agent_id: str | None = None,
     retry_on_noop: bool = False,
     feedback_artifact_paths: list[str] | None = None,
+    prompt_variant: str = "anti_draw_coached",
 ) -> tuple[bool, str]:
     old_aggression = _read_aggression(submission_main_path)
     previous_round = round_idx - 1
@@ -275,6 +276,7 @@ def _apply_openclaw_minimal_revision(
         runner_cmd.extend(["--provider-model", provider_model])
     if retry_on_noop:
         runner_cmd.append("--retry-on-noop")
+    runner_cmd.extend(["--prompt-variant", prompt_variant])
     if isinstance(feedback_artifact_paths, list):
         for p in feedback_artifact_paths:
             if isinstance(p, str) and p.strip():
@@ -355,6 +357,123 @@ def _apply_openclaw_minimal_revision(
     return True, "openclaw-minimal revision applied: AGGRESSION unchanged"
 
 
+def _apply_openclaw_minimal_initial_synthesis(
+    codebase_post_dir: Path,
+    submission_main_path: Path,
+    game: str,
+    regime: str,
+    log_path: Path,
+    model_id: str | None = None,
+    provider_model: str | None = None,
+    openclaw_agent_id: str | None = None,
+    retry_on_noop: bool = False,
+    strategy_profile_id: str | None = None,
+    strategy_profile_text: str | None = None,
+    prompt_variant: str = "anti_draw_coached",
+) -> tuple[bool, str]:
+    old_aggression = _read_aggression(submission_main_path)
+    runner_cmd = [
+        "python",
+        "-m",
+        "runner.core.openclaw_minimal",
+        "--mode",
+        "initial_synthesis",
+        "--bootstrap",
+        str(Path(__file__).with_name("openclaw_minimal_bootstrap.txt")),
+        "--codebase-post-dir",
+        str(codebase_post_dir),
+        "--side",
+        "left",
+        "--game",
+        game,
+        "--regime",
+        regime,
+    ]
+    if openclaw_agent_id:
+        runner_cmd.extend(["--agent-id", openclaw_agent_id])
+    if model_id:
+        runner_cmd.extend(["--model-id", model_id])
+    if provider_model:
+        runner_cmd.extend(["--provider-model", provider_model])
+    if retry_on_noop:
+        runner_cmd.append("--retry-on-noop")
+    runner_cmd.extend(["--prompt-variant", prompt_variant])
+    if strategy_profile_id:
+        runner_cmd.extend(["--strategy-profile-id", strategy_profile_id])
+    if strategy_profile_text:
+        runner_cmd.extend(["--strategy-profile-text", strategy_profile_text])
+
+    proc = subprocess.run(
+        runner_cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        stderr = proc.stderr.strip() or proc.stdout.strip() or "unknown openclaw-minimal error"
+        _append_revision_log(
+            log_path=log_path,
+            round_idx=0,
+            side="initial",
+            changed=False,
+            old_aggression=old_aggression,
+            new_aggression=old_aggression,
+            reason="initial synthesis",
+            executor="openclaw-minimal",
+            success=False,
+            changed_files=[],
+            model_id=model_id,
+            agent_id=openclaw_agent_id,
+            provider_model=provider_model,
+        )
+        return False, f"openclaw-minimal initial synthesis failed: {stderr}"
+
+    try:
+        result = json.loads(proc.stdout.strip())
+    except Exception:
+        _append_revision_log(
+            log_path=log_path,
+            round_idx=0,
+            side="initial",
+            changed=False,
+            old_aggression=old_aggression,
+            new_aggression=old_aggression,
+            reason="initial synthesis",
+            executor="openclaw-minimal",
+            success=False,
+            changed_files=[],
+            model_id=model_id,
+            agent_id=openclaw_agent_id,
+            provider_model=provider_model,
+        )
+        return False, "openclaw-minimal initial synthesis failed: invalid JSON result"
+
+    new_aggression = _read_aggression(submission_main_path)
+    changed_files = result.get("changed_files", [])
+    changed = bool(result.get("changed", False))
+    success = bool(result.get("success", False))
+    _append_revision_log(
+        log_path=log_path,
+        round_idx=0,
+        side="initial",
+        changed=changed,
+        old_aggression=old_aggression,
+        new_aggression=new_aggression,
+        reason="initial synthesis",
+        executor="openclaw-minimal",
+        success=success,
+        changed_files=changed_files if isinstance(changed_files, list) else [],
+        model_id=model_id,
+        agent_id=openclaw_agent_id,
+        provider_model=provider_model,
+    )
+    if not success:
+        return False, "openclaw-minimal initial synthesis failed: unsuccessful result"
+    if changed:
+        return True, f"openclaw-minimal initial synthesis applied: AGGRESSION {old_aggression}->{new_aggression}"
+    return True, "openclaw-minimal initial synthesis applied: AGGRESSION unchanged"
+
+
 def apply_minimal_revision(
     codebase_play_dir: Path,
     codebase_post_dir: Path,
@@ -369,6 +488,7 @@ def apply_minimal_revision(
     require_effective_submission_change: bool = False,
     revision_retry_on_noop: int = 0,
     feedback_artifact_paths: list[str] | None = None,
+    prompt_variant: str = "anti_draw_coached",
 ) -> tuple[bool, str]:
     copy_tree(codebase_play_dir, codebase_post_dir)
 
@@ -438,6 +558,7 @@ def apply_minimal_revision(
                 openclaw_agent_id=openclaw_agent_id,
                 retry_on_noop=attempt > 0,
                 feedback_artifact_paths=feedback_artifact_paths,
+                prompt_variant=prompt_variant,
             )
             last_msg = msg
             if not ok:
@@ -461,6 +582,96 @@ def apply_minimal_revision(
         agent_id=openclaw_agent_id,
         provider_model=provider_model,
     )
+
+
+def apply_minimal_initial_synthesis(
+    starter_codebase_dir: Path,
+    codebase_post_dir: Path,
+    *,
+    game: str = "",
+    regime: str = "",
+    model_id: str | None = None,
+    executor: str | None = None,
+    openclaw_agent_id: str | None = None,
+    provider_model: str | None = None,
+    require_effective_submission_change: bool = False,
+    initial_synthesis_retry_on_noop: int = 0,
+    strategy_profile_id: str | None = None,
+    strategy_profile_text: str | None = None,
+    prompt_variant: str = "anti_draw_coached",
+) -> tuple[bool, str]:
+    copy_tree(starter_codebase_dir, codebase_post_dir)
+
+    submission_main_path = codebase_post_dir / "submission" / "main.py"
+    notes_dir = codebase_post_dir / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    log_path = notes_dir / "revision_log.md"
+
+    if not executor:
+        _append_revision_log(
+            log_path=log_path,
+            round_idx=0,
+            side="initial",
+            changed=False,
+            old_aggression=_read_aggression(submission_main_path),
+            new_aggression=_read_aggression(submission_main_path),
+            reason="missing executor for initial synthesis",
+            executor="unknown",
+            success=False,
+            changed_files=[],
+            model_id=model_id,
+            agent_id=openclaw_agent_id,
+            provider_model=provider_model,
+        )
+        return False, "initial synthesis failed: missing executor"
+    if executor != "openclaw-minimal":
+        _append_revision_log(
+            log_path=log_path,
+            round_idx=0,
+            side="initial",
+            changed=False,
+            old_aggression=_read_aggression(submission_main_path),
+            new_aggression=_read_aggression(submission_main_path),
+            reason=f"unsupported executor for initial synthesis: {executor}",
+            executor=executor,
+            success=False,
+            changed_files=[],
+            model_id=model_id,
+            agent_id=openclaw_agent_id,
+            provider_model=provider_model,
+        )
+        return False, f"initial synthesis failed: unsupported executor '{executor}'"
+
+    retries = max(0, int(initial_synthesis_retry_on_noop or 0)) if require_effective_submission_change else 0
+    before_hash = _sha256_file(submission_main_path)
+    last_msg = "openclaw-minimal initial synthesis failed: unknown error"
+    for attempt in range(retries + 1):
+        ok, msg = _apply_openclaw_minimal_initial_synthesis(
+            codebase_post_dir=codebase_post_dir,
+            submission_main_path=submission_main_path,
+            game=game,
+            regime=regime,
+            log_path=log_path,
+            model_id=model_id,
+            provider_model=provider_model,
+            openclaw_agent_id=openclaw_agent_id,
+            retry_on_noop=attempt > 0,
+            strategy_profile_id=strategy_profile_id,
+            strategy_profile_text=strategy_profile_text,
+            prompt_variant=prompt_variant,
+        )
+        last_msg = msg
+        if not ok:
+            return ok, msg
+        if not require_effective_submission_change:
+            return ok, msg
+        after_hash = _sha256_file(submission_main_path)
+        if before_hash != after_hash:
+            return ok, msg
+        if attempt < retries:
+            continue
+    return False, "OpenClaw initial synthesis made no effective submission/main.py change"
+
 
 def apply_noop_revision(
     codebase_play_dir: Path,

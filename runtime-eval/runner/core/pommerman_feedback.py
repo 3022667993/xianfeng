@@ -15,6 +15,44 @@ def _winner_from_lr(value: Any) -> str:
     return "unknown"
 
 
+def _compact_leg_metrics(match_dir: Path, leg_label: str, tested_side: str) -> dict[str, float | int]:
+    path = match_dir / f"trajectory_compact_{leg_label}.jsonl"
+    if not path.exists():
+        return {"bomb_action_rate": 0.0, "stop_action_rate": 0.0, "step_count": 0}
+    seat_key = "seat_0" if tested_side == "left" else "seat_1"
+    total = 0
+    bomb = 0
+    stop = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        actions = payload.get("actions")
+        if not isinstance(actions, dict):
+            continue
+        action = actions.get(seat_key)
+        if action is None:
+            continue
+        total += 1
+        if action == 5:
+            bomb += 1
+        if action == 0:
+            stop += 1
+    if total <= 0:
+        return {"bomb_action_rate": 0.0, "stop_action_rate": 0.0, "step_count": 0}
+    return {
+        "bomb_action_rate": round(bomb / total, 6),
+        "stop_action_rate": round(stop / total, 6),
+        "step_count": total,
+    }
+
+
 def _seat_result(leg: dict, side: str) -> str:
     winner = _winner_from_lr(leg.get("left_right_winner"))
     if winner == "draw":
@@ -197,12 +235,32 @@ def build_agent_feedback(summary: dict, agent_id: str, match_dir: Path) -> dict:
     wins = sum(1 for x in leg_results if x["result"] == "win")
     losses = sum(1 for x in leg_results if x["result"] == "loss")
     draws = sum(1 for x in leg_results if x["result"] == "draw")
+    m_a = _compact_leg_metrics(match_dir, "match_a", side)
+    m_b = _compact_leg_metrics(match_dir, "match_b", side)
+    steps_total = int(m_a["step_count"]) + int(m_b["step_count"])
+    bomb_rate = (
+        ((m_a["bomb_action_rate"] * int(m_a["step_count"])) + (m_b["bomb_action_rate"] * int(m_b["step_count"]))) / steps_total
+        if steps_total > 0
+        else 0.0
+    )
+    stop_rate = (
+        ((m_a["stop_action_rate"] * int(m_a["step_count"])) + (m_b["stop_action_rate"] * int(m_b["step_count"]))) / steps_total
+        if steps_total > 0
+        else 0.0
+    )
+    terminal_steps = [x["steps"] for x in leg_results if isinstance(x.get("steps"), int) and x.get("steps", -1) >= 0]
+    avg_terminal_step = (sum(terminal_steps) / len(terminal_steps)) if terminal_steps else 0.0
+    non_draw_match_count = sum(1 for x in leg_results if x["result"] in {"win", "loss"})
     diag = {
         "seat_sensitivity_observed": bool(summary["agent_summaries"][agent_id]["seat_sensitivity_observed"]),
         "dummy_interference_observed": bool(summary["agent_summaries"][agent_id]["dummy_interference_observed"]),
         "both_tested_agents_lost_any_leg": bool(summary["seat_swap_summary"]["both_tested_agents_lost_any_leg"]),
         "short_game_loss_observed": any(x["result"] == "loss" and isinstance(x["steps"], int) and x["steps"] <= 100 for x in leg_results),
         "long_game_win_observed": any(x["result"] == "win" and isinstance(x["steps"], int) and x["steps"] >= 250 for x in leg_results),
+        "bomb_action_rate": round(bomb_rate, 6),
+        "stop_action_rate": round(stop_rate, 6),
+        "average_terminal_step": round(avg_terminal_step, 3),
+        "non_draw_match_count": int(non_draw_match_count),
     }
     compact_events_path = match_dir / "trajectory_events.json"
     compact_events = None
@@ -278,6 +336,8 @@ def _feedback_md(payload: dict) -> str:
     lines.append("## Seat-Swap Diagnostics")
     d = payload["diagnostics"]
     for k in ["seat_sensitivity_observed", "dummy_interference_observed", "both_tested_agents_lost_any_leg", "short_game_loss_observed", "long_game_win_observed"]:
+        lines.append(f"- {k}: {d[k]}")
+    for k in ["bomb_action_rate", "stop_action_rate", "average_terminal_step", "non_draw_match_count"]:
         lines.append(f"- {k}: {d[k]}")
     lines.append("")
     lines.append("## Factual Observations")

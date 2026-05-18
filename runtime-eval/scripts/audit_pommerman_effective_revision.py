@@ -35,14 +35,20 @@ def _iter_round_dirs(logs_root: Path) -> list[Path]:
 
 
 def _load_tournament_require_effective_change() -> bool:
-    cfg_path = Path("configs/tournaments/pommerman_gptv16_a00_openclaw_adaptive_3round_smoke.yaml")
-    if not cfg_path.exists():
-        return False
-    try:
-        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
-    except Exception:
-        return False
-    return bool(cfg.get("require_effective_submission_change", False)) if isinstance(cfg, dict) else False
+    cfg_paths = [
+        Path("configs/tournaments/pommerman_gptv16_a00_openclaw_adaptive_3round_smoke.yaml"),
+        Path("configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke.yaml"),
+    ]
+    for cfg_path in cfg_paths:
+        if not cfg_path.exists():
+            continue
+        try:
+            cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(cfg, dict) and bool(cfg.get("require_effective_submission_change", False)):
+            return True
+    return False
 
 
 def _extract_diff_targets(diff_path: Path, before_dir: Path, after_dir: Path) -> list[str]:

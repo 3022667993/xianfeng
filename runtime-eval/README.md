@@ -17,6 +17,7 @@ Checkpoint scope is **Pommerman + A00 only**.
     - single-agent (`1 round`)
     - all-agent (`1 round`, all 6 agents)
   - 2-round real OpenClaw adaptive smoke (`2 rounds x 3 matches`)
+  - 3-round real OpenClaw adaptive smoke with pre-round initial synthesis (`3 rounds x 3 matches`)
   - Pommerman seed control applied via `env.seed(...)`
   - Compact trajectory v2 has run
 - Not implemented here:
@@ -71,6 +72,19 @@ python scripts/audit_pommerman_openclaw_adaptive_2round_smoke.py
 
 python -m runner.main \
   --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+python scripts/audit_pommerman_initial_synthesis.py
+python scripts/audit_pommerman_initial_synthesis_3round_smoke.py
+
+# Neutral prompt variant (formal-style objective/constraints)
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_smoke.yaml \
+  --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
+
+python -m runner.main \
+  --regime configs/regimes/A00.yaml \
   --tournament configs/tournaments/pommerman_gptv16_a00_6model_adaptive_dryrun.yaml \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 python scripts/audit_pommerman_10round_adaptive_dryrun.py
@@ -91,6 +105,8 @@ sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
 - `openclaw_revision_smoke_audit=PASS`
 - `openclaw_revision_smoke_all_agents_audit=PASS`
 - `openclaw_adaptive_2round_smoke_audit=PASS`
+- `pommerman_initial_synthesis_audit=PASS`
+- `pommerman_initial_synthesis_3round_smoke_audit=PASS`
 - `adaptive_dryrun_audit=PASS`
 - no `seed requested but not applied` warnings for current Pommerman adaptive smoke
 
@@ -137,7 +153,23 @@ sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
 - Runner/config controls revision invocation via `revision_rounds`, `revision_subset_size`, and `require_all_agents_revised`.
 - During OpenClaw revision, the model autonomously decides how to modify code.
 - A model may make small changes or no meaningful code change.
-- Audits verify invocation, provider routing, `fallback_used=false`, and `revision_ok`; audits do not require a forced code diff every round.
+- Route provenance is required for accepted synthesis/revision:
+  - `provider_route_status=matched`
+  - non-empty `actual_provider` and `actual_model`
+  - `fallback_used=false`
+- If route provenance is unknown, run is treated as unverified and retried from clean base when configured.
+
+## Prompt Variants
+- OpenClaw initial synthesis and revision prompts are required to define task, artifacts, and constraints.
+- Prompt behavior is controlled by config keys:
+  - `initial_synthesis_prompt_variant`
+  - `revision_prompt_variant`
+- Supported values:
+  - `anti_draw_coached`: engineering smoke behavior with explicit anti-draw tactical coaching.
+  - `neutral`: formal-style objective/constraints prompt (no detailed Pommerman tactical prescriptions).
+- `configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke.yaml` keeps `anti_draw_coached`.
+- `configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_smoke.yaml` uses `neutral`.
+- Full 10-round real OpenClaw run remains future work.
 
 ## Generated Artifacts Policy
 - `workspace/` is generated runtime state.

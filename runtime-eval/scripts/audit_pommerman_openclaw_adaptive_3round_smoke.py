@@ -211,6 +211,7 @@ def audit_openclaw_adaptive_3round_smoke(
 ) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+    initial_synthesis_expected = tournament_name == "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke"
 
     round_agent_sets: list[set[str]] = []
     total_matches = 0
@@ -261,6 +262,31 @@ def audit_openclaw_adaptive_3round_smoke(
     all_agents = set.union(*round_agent_sets) if round_agent_sets else set()
     if len(all_agents) != 6:
         errors.append("must observe exactly 6 unique agents")
+
+    if initial_synthesis_expected:
+        ip_path = Path("logs/round_1/initial_propagation_manifest.json")
+        if not ip_path.exists():
+            errors.append("missing logs/round_1/initial_propagation_manifest.json")
+        else:
+            ip = _load_json(ip_path)
+            entries = ip.get("agents")
+            if not isinstance(entries, list) or len(entries) != 6:
+                errors.append("initial_propagation_manifest must include exactly 6 entries")
+            else:
+                by_agent = {x.get("agent_id"): x for x in entries if isinstance(x, dict)}
+                for agent_id in all_agents:
+                    rec = by_agent.get(agent_id)
+                    if not isinstance(rec, dict):
+                        errors.append(f"initial propagation missing agent {agent_id}")
+                        continue
+                    source = Path(str(rec.get("source_initial_post_path")))
+                    target = Path(str(rec.get("target_play_path")))
+                    source_hash = _sha256_file(source / "submission/main.py")
+                    target_hash = _sha256_file(target / "submission/main.py")
+                    if source_hash != target_hash:
+                        errors.append(f"initial propagation hash mismatch for {agent_id}")
+                    if rec.get("propagation_matches_post") is not True:
+                        errors.append(f"initial propagation propagation_matches_post must be true for {agent_id}")
 
     errors.extend(_audit_revision_manifest(Path("logs/round_1/revision_manifest.json"), "round_1"))
     errors.extend(_audit_revision_manifest(Path("logs/round_2/revision_manifest.json"), "round_2"))

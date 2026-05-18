@@ -69,6 +69,9 @@ def test_revision_message_includes_feedback_and_effective_change_requirements():
     assert "trajectory_events.json" in msg
     assert "You must modify submission/main.py" in msg
     assert "Previous attempt made no submitted-code change" in msg
+    assert "Treat 800-step draw outcomes as a failure signal." in msg
+    assert "what anti-draw behavior was added" in msg
+    assert "what safety guard prevents suicide" in msg
 
 
 def test_revision_message_renders_extra_artifact_paths():
@@ -84,6 +87,70 @@ def test_revision_message_renders_extra_artifact_paths():
     )
     assert "additional round artifacts provided by runner" in msg
     assert "/tmp/run/match/scorecard.json" in msg
+
+
+def test_initial_synthesis_message_includes_strategy_profile():
+    msg = ocm._make_initial_synthesis_message(
+        bootstrap_text="BOOT",
+        run_dir=Path("/tmp/run"),
+        codebase_post_t_dir=Path("/tmp/run/codebase_post_t"),
+        game="pommerman_1v1",
+        regime="A00",
+        strategy_profile_id="safe_opponent_pressure",
+        strategy_profile_text="Apply pressure when safe.",
+    )
+    assert "assigned strategy profile id: safe_opponent_pressure" in msg
+    assert "Apply pressure when safe." in msg
+    assert "Do not copy a generic template unchanged" in msg
+    assert "Treat 800-step draw behavior as a failure mode to avoid in design." in msg
+    assert "reduce STOP usage unless unsafe" in msg
+
+
+def test_neutral_revision_message_omits_coached_tactics_but_keeps_constraints():
+    msg = ocm._make_revision_message(
+        bootstrap_text="BOOT",
+        run_dir=Path("/tmp/run"),
+        codebase_post_t_dir=Path("/tmp/run/codebase_post_t"),
+        feedback_copy_path=Path("/tmp/run/feedback_package.json"),
+        side="left",
+        game="pommerman_1v1",
+        regime="A00",
+        retry_on_noop=True,
+        prompt_variant="neutral",
+    )
+    assert "agent_feedback_<agent_id>.md" in msg
+    assert "You must modify submission/main.py" in msg
+    assert "Objective: improve expected future match performance" in msg
+    assert "If previous matches ended in draw" in msg
+    assert "Previous attempt made no submitted-code change" in msg
+    assert "center when safe" not in msg
+    assert "clear wood for powerups" not in msg
+    assert "pressure opponent when nearby and safe" not in msg
+    assert "reduce STOP usage unless unsafe" not in msg
+    assert "what anti-draw behavior was added" not in msg
+
+
+def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_constraints():
+    msg = ocm._make_initial_synthesis_message(
+        bootstrap_text="BOOT",
+        run_dir=Path("/tmp/run"),
+        codebase_post_t_dir=Path("/tmp/run/codebase_post_t"),
+        game="pommerman_1v1",
+        regime="A00",
+        strategy_profile_id="profile_a",
+        strategy_profile_text="Profile text.",
+        prompt_variant="neutral",
+    )
+    assert "assigned strategy profile id: profile_a" in msg
+    assert "Objective: improve expected future match performance" in msg
+    assert "If early outcomes are likely to be draws" in msg
+    assert "You must edit submission/main.py." in msg
+    assert "Do not modify scripts/run_arena.sh, scripts/build.sh, tests, configs, or metadata files." in msg
+    assert "center when safe" not in msg
+    assert "clear wood for powerups" not in msg
+    assert "pressure nearby opponents when safe" not in msg
+    assert "reduce STOP usage unless unsafe" not in msg
+    assert "what anti-draw behavior was added" not in msg
 
 
 def test_provider_route_mismatch_still_fails_openclaw_revision_smoke_audit(tmp_path, monkeypatch):
