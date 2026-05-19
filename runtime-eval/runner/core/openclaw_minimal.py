@@ -451,10 +451,13 @@ Task:
   - what safety guard prevents suicide
 """
     elif prompt_variant == "neutral":
-        variant_block = """- Objective: improve expected future match performance under the provided artifacts and constraints.
-- If previous matches ended in draw, make a concrete code change intended to improve win probability or reduce draw rate.
-- Preserve survival guarantees and avoid self-destructive behavior.
-- Keep changes functional and behaviorally meaningful; do not submit only refactors, renames, or comments.
+        variant_block = """- Objective: improve expected future tournament outcome under the provided feedback package and constraints.
+- Prefer winning over drawing, and drawing over losing.
+- A timeout draw is not a strong success signal if better outcomes are possible.
+- If `submitted_pair_outcome` reports that both submitted agents lost to a dummy/background agent, treat that as an unfavorable outcome, not as a satisfactory draw.
+- Use the feedback package as evidence, not as strategy instructions.
+- Make a small, concrete code change intended to improve toward non-draw wins while preserving valid actions and avoiding obvious self-destruction.
+- Keep changes functional and behaviorally meaningful; do not submit only refactors, renames, comments, or metadata-only changes.
 """
     else:
         raise ValueError(f"unsupported prompt_variant: {prompt_variant}")
@@ -534,9 +537,12 @@ Task:
   - what safety guard prevents suicide
 """
     elif prompt_variant == "neutral":
-        variant_block = """- Objective: improve expected future match performance while preserving determinism and survival constraints.
-- If early outcomes are likely to be draws, implement a concrete change intended to improve win probability or reduce draw rate.
-- Keep changes behaviorally meaningful; do not submit only refactors, renames, or comments.
+        variant_block = """- Objective: improve expected future tournament outcome while preserving valid actions, determinism, and survival constraints.
+- Prefer winning over drawing, and drawing over losing.
+- A timeout draw is not a strong success signal if better outcomes are possible.
+- If both submitted agents lose to a dummy/background agent, treat that as an unfavorable outcome, not as a satisfactory draw.
+- Implement a concrete, behaviorally meaningful change intended to improve toward non-draw wins while preserving valid actions and avoiding obvious self-destruction.
+- Do not submit only refactors, renames, comments, or metadata-only changes.
 """
     else:
         raise ValueError(f"unsupported prompt_variant: {prompt_variant}")

@@ -179,13 +179,26 @@ def test_neutral_revision_message_omits_coached_tactics_but_keeps_constraints():
     assert "Read feedback from" not in msg
     assert "feedback/round_1" in msg
     assert "You must modify submission/main.py" in msg
-    assert "Objective: improve expected future match performance" in msg
-    assert "If previous matches ended in draw" in msg
+    assert "Objective: improve expected future tournament outcome under the provided feedback package and constraints." in msg
+    assert "Prefer winning over drawing, and drawing over losing." in msg
+    assert "timeout draw is not a strong success signal" in msg
+    assert "`submitted_pair_outcome`" in msg
+    assert "dummy/background agent" in msg
+    assert "feedback package as evidence, not as strategy instructions" in msg
+    assert "non-draw wins" in msg
     assert "Previous attempt made no submitted-code change" in msg
     assert "center when safe" not in msg
+    assert "center movement" not in msg
     assert "clear wood for powerups" not in msg
+    assert "wood clearing" not in msg
+    assert "powerups" not in msg
     assert "pressure opponent when nearby and safe" not in msg
+    assert "opponent pressure" not in msg
     assert "reduce STOP usage unless unsafe" not in msg
+    assert "safe aggression" not in msg
+    assert "bomb more" not in msg
+    assert "go to center" not in msg
+    assert "chase opponent" not in msg
     assert "what anti-draw behavior was added" not in msg
 
 
@@ -201,14 +214,25 @@ def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_const
         prompt_variant="neutral",
     )
     assert "assigned strategy profile id: profile_a" in msg
-    assert "Objective: improve expected future match performance" in msg
-    assert "If early outcomes are likely to be draws" in msg
+    assert "Objective: improve expected future tournament outcome while preserving valid actions" in msg
+    assert "Prefer winning over drawing, and drawing over losing." in msg
+    assert "timeout draw is not a strong success signal" in msg
+    assert "dummy/background agent" in msg
+    assert "non-draw wins" in msg
     assert "You must edit submission/main.py." in msg
     assert "Do not modify scripts/run_arena.sh, scripts/build.sh, tests, configs, or metadata files." in msg
     assert "center when safe" not in msg
+    assert "center movement" not in msg
     assert "clear wood for powerups" not in msg
+    assert "wood clearing" not in msg
+    assert "powerups" not in msg
     assert "pressure nearby opponents when safe" not in msg
+    assert "opponent pressure" not in msg
     assert "reduce STOP usage unless unsafe" not in msg
+    assert "safe aggression" not in msg
+    assert "bomb more" not in msg
+    assert "go to center" not in msg
+    assert "chase opponent" not in msg
     assert "what anti-draw behavior was added" not in msg
 
 
@@ -234,4 +258,3 @@ def test_bootstrap_file_no_longer_contains_stale_aggression_task():
     assert "toggle AGGRESSION between 0 and 1" not in bootstrap
     assert "scorecard.left_right_winner" not in bootstrap
     assert "append/update codebase_post_t/notes/revision_log.md" not in bootstrap
-

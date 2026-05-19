@@ -76,7 +76,7 @@ Do not create paired aggregate scorecards or additional per-match games inside t
 
 ## 4. Objective
 
-Your agent should maximize its chance of surviving and beating the other evaluated agent.
+Your agent should improve tournament outcome under the runtime-eval scoring rules. Prefer wins over draws, and draws over losses. A dummy/background-agent win is unfavorable even when the two submitted agents are tied pairwise. Feedback packages provide evidence for diagnosis; this README defines the rules, action meanings, objective, and submission API.
 
 Practical priorities:
 
@@ -658,6 +658,5 @@ A boring agent that survives is often better than an aggressive agent that kills
 * [https://pommerman.readthedocs.io/en/latest/README/](https://pommerman.readthedocs.io/en/latest/README/)
 * [https://pommerman.readthedocs.io/en/latest/game_rules/](https://pommerman.readthedocs.io/en/latest/game_rules/)
 * [https://github.com/MultiAgentLearning/playground](https://github.com/MultiAgentLearning/playground)
-
 
 
