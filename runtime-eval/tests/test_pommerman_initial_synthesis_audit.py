@@ -4,6 +4,8 @@ from pathlib import Path
 
 from scripts.audit_pommerman_initial_synthesis import audit_pommerman_initial_synthesis
 
+CURRENT_TOURNAMENT = "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_double_rr_smoke"
+
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -70,14 +72,14 @@ def _mk_base(tmp_path: Path, tournament: str):
 
 def test_initial_synthesis_audit_passes(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_base(tmp_path, "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke")
+    tournament = _mk_base(tmp_path, CURRENT_TOURNAMENT)
     errors, _warnings = audit_pommerman_initial_synthesis(tournament_name=tournament)
     assert errors == []
 
 
 def test_initial_synthesis_audit_fails_when_no_effective_change(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_base(tmp_path, "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke")
+    tournament = _mk_base(tmp_path, CURRENT_TOURNAMENT)
     p = tmp_path / "logs" / "initial_synthesis_manifest.json"
     obj = json.loads(p.read_text(encoding="utf-8"))
     obj["agents"][0]["effective_initial_submission_changed"] = False
@@ -90,7 +92,7 @@ def test_initial_synthesis_audit_fails_when_no_effective_change(tmp_path, monkey
 
 def test_initial_synthesis_audit_fails_when_all_hashes_identical(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_base(tmp_path, "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke")
+    tournament = _mk_base(tmp_path, CURRENT_TOURNAMENT)
     p = tmp_path / "logs" / "initial_synthesis_manifest.json"
     obj = json.loads(p.read_text(encoding="utf-8"))
     same_hash = obj["agents"][0]["initial_submission_sha256"]
@@ -103,7 +105,7 @@ def test_initial_synthesis_audit_fails_when_all_hashes_identical(tmp_path, monke
 
 def test_initial_synthesis_audit_warns_when_unique_hashes_below_four(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_base(tmp_path, "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke")
+    tournament = _mk_base(tmp_path, CURRENT_TOURNAMENT)
     p = tmp_path / "logs" / "initial_synthesis_manifest.json"
     obj = json.loads(p.read_text(encoding="utf-8"))
     # Keep 2 unique hashes.
@@ -119,7 +121,7 @@ def test_initial_synthesis_audit_warns_when_unique_hashes_below_four(tmp_path, m
 
 def test_initial_synthesis_audit_fails_when_profile_missing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_base(tmp_path, "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke")
+    tournament = _mk_base(tmp_path, CURRENT_TOURNAMENT)
     p = tmp_path / "logs" / "initial_synthesis_manifest.json"
     obj = json.loads(p.read_text(encoding="utf-8"))
     obj["agents"][0].pop("initial_strategy_profile_id", None)
@@ -130,7 +132,7 @@ def test_initial_synthesis_audit_fails_when_profile_missing(tmp_path, monkeypatc
 
 def test_initial_synthesis_audit_fails_on_propagation_mismatch(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tournament = _mk_base(tmp_path, "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke")
+    tournament = _mk_base(tmp_path, CURRENT_TOURNAMENT)
     p = tmp_path / "logs" / "round_1" / "initial_propagation_manifest.json"
     obj = json.loads(p.read_text(encoding="utf-8"))
     bad_agent = obj["agents"][0]["agent_id"]

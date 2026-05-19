@@ -36,8 +36,8 @@ def _iter_round_dirs(logs_root: Path) -> list[Path]:
 
 def _load_tournament_require_effective_change() -> bool:
     cfg_paths = [
-        Path("configs/tournaments/pommerman_gptv16_a00_openclaw_adaptive_3round_smoke.yaml"),
-        Path("configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke.yaml"),
+        Path("configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_double_rr_smoke.yaml"),
+        Path("configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_10round_neutral_double_rr.yaml"),
     ]
     for cfg_path in cfg_paths:
         if not cfg_path.exists():

@@ -20,7 +20,7 @@ def _sha256_file(path: Path) -> str | None:
 
 
 def audit_pommerman_initial_synthesis(
-    tournament_name: str = "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke",
+    tournament_name: str = "pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_double_rr_smoke",
 ) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []

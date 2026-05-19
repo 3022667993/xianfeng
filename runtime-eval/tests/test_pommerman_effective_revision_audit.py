@@ -29,10 +29,12 @@ def _mk_round_manifest(round_dir: Path) -> None:
 
 
 def _mk_tournament_cfg(*, require_effective: bool) -> None:
-    cfg_path = Path("configs/tournaments/pommerman_gptv16_a00_openclaw_adaptive_3round_smoke.yaml")
+    cfg_path = Path(
+        "configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_double_rr_smoke.yaml"
+    )
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(
-        "name: pommerman_gptv16_a00_openclaw_adaptive_3round_smoke\n"
+        "name: pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_double_rr_smoke\n"
         f"require_effective_submission_change: {'true' if require_effective else 'false'}\n",
         encoding="utf-8",
     )
