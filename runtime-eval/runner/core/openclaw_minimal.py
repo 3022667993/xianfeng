@@ -452,11 +452,12 @@ Task:
 """
     elif prompt_variant == "neutral":
         variant_block = """- Objective: improve expected future tournament outcome under the provided feedback package and constraints.
-- Prefer winning over drawing, and drawing over losing.
-- A timeout draw is not a strong success signal if better outcomes are possible.
-- If `submitted_pair_outcome` reports that both submitted agents lost to a dummy/background agent, treat that as an unfavorable outcome, not as a satisfactory draw.
-- Use the feedback package as evidence, not as strategy instructions.
-- Make a small, concrete code change intended to improve toward non-draw wins while preserving valid actions and avoiding obvious self-destruction.
+- Use the feedback package, public scoreboard, match replay evidence, action logs, and run logs as evidence to understand what happened in previous matches.
+- Then update `submission/main.py` with a concrete strategy or behavior change intended to improve future tournament outcomes against opponents.
+- Prefer wins over draws, and draws over losses.
+- If the previous result was already favorable, look for ways to make the behavior more robust, consistent, or resilient in future matches.
+- Treat timeout draws and cases where `submitted_pair_outcome` reports that both submitted agents lost to a dummy/background agent as unfavorable signals when better outcomes may be possible.
+- The feedback package is evidence, not a hand-authored strategy script.
 - Keep changes functional and behaviorally meaningful; do not submit only refactors, renames, comments, or metadata-only changes.
 """
     else:
@@ -538,10 +539,11 @@ Task:
 """
     elif prompt_variant == "neutral":
         variant_block = """- Objective: improve expected future tournament outcome while preserving valid actions, determinism, and survival constraints.
-- Prefer winning over drawing, and drawing over losing.
+- Prefer wins over draws, and draws over losses.
+- Design and implement a concrete behavior or strategy in `submission/main.py` intended to improve future performance against opponents.
 - A timeout draw is not a strong success signal if better outcomes are possible.
 - If both submitted agents lose to a dummy/background agent, treat that as an unfavorable outcome, not as a satisfactory draw.
-- Implement a concrete, behaviorally meaningful change intended to improve toward non-draw wins while preserving valid actions and avoiding obvious self-destruction.
+- Avoid obvious self-destruction and keep the submission valid.
 - Do not submit only refactors, renames, comments, or metadata-only changes.
 """
     else:

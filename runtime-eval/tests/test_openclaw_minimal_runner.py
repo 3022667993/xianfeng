@@ -180,12 +180,15 @@ def test_neutral_revision_message_omits_coached_tactics_but_keeps_constraints():
     assert "feedback/round_1" in msg
     assert "You must modify submission/main.py" in msg
     assert "Objective: improve expected future tournament outcome under the provided feedback package and constraints." in msg
-    assert "Prefer winning over drawing, and drawing over losing." in msg
-    assert "timeout draw is not a strong success signal" in msg
+    assert "feedback package, public scoreboard, match replay evidence, action logs, and run logs as evidence" in msg
+    assert "concrete strategy or behavior change" in msg
+    assert "improve future tournament outcomes against opponents" in msg
+    assert "Prefer wins over draws, and draws over losses." in msg
+    assert "robust, consistent, or resilient" in msg
+    assert "timeout draws" in msg
     assert "`submitted_pair_outcome`" in msg
     assert "dummy/background agent" in msg
-    assert "feedback package as evidence, not as strategy instructions" in msg
-    assert "non-draw wins" in msg
+    assert "feedback package is evidence, not a hand-authored strategy script" in msg
     assert "Previous attempt made no submitted-code change" in msg
     assert "center when safe" not in msg
     assert "center movement" not in msg
@@ -215,10 +218,12 @@ def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_const
     )
     assert "assigned strategy profile id: profile_a" in msg
     assert "Objective: improve expected future tournament outcome while preserving valid actions" in msg
-    assert "Prefer winning over drawing, and drawing over losing." in msg
+    assert "Prefer wins over draws, and draws over losses." in msg
+    assert "concrete behavior or strategy" in msg
+    assert "improve future performance against opponents" in msg
     assert "timeout draw is not a strong success signal" in msg
     assert "dummy/background agent" in msg
-    assert "non-draw wins" in msg
+    assert "Avoid obvious self-destruction and keep the submission valid." in msg
     assert "You must edit submission/main.py." in msg
     assert "Do not modify scripts/run_arena.sh, scripts/build.sh, tests, configs, or metadata files." in msg
     assert "center when safe" not in msg

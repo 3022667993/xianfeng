@@ -40,6 +40,8 @@ For game rules, action meanings, win/draw/loss objective, rewards, and the requi
 
 Improve future match performance under the tournament scoring rules. Prefer winning over drawing, and drawing over losing. A timeout draw is not a strong success signal if better outcomes are possible. If `submitted_pair_outcome` says both submitted agents lost to a dummy/background agent, treat that as an unfavorable outcome, not as a successful draw.
 
+Use this feedback package as evidence. Start with `public_scoreboard.json`, then `matches/*/match_index.json`, then `matches/*/actions.jsonl`; inspect `matches/*/official_record_json/game_state.json` selectively when board/state replay is needed. Based on this evidence, update `submission/main.py` with a concrete strategy or behavior change intended to improve future tournament outcomes against opponents. If your previous result was favorable, you may still improve robustness, consistency, or resilience.
+
 Current schedule uses single-leg double round-robin. Each match package represents one game. Seat-bias is handled by later reversed encounters in the full double round-robin schedule, not by running multiple games inside one scheduled match.
 
 ## Files

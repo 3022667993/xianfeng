@@ -175,6 +175,12 @@ def test_feedback_package_v4_generated_with_official_record_and_audits_pass(tmp_
     assert "A timeout draw is not a strong success signal if better outcomes are possible." in readme_text
     assert "both submitted agents lost to a dummy/background agent" in readme_text
     assert "not as a successful draw" in readme_text
+    assert "Use this feedback package as evidence." in readme_text
+    assert "Start with `public_scoreboard.json`, then `matches/*/match_index.json`, then `matches/*/actions.jsonl`" in readme_text
+    assert "board/state replay is needed" in readme_text
+    assert "concrete strategy or behavior change" in readme_text
+    assert "improve future tournament outcomes against opponents" in readme_text
+    assert "robustness, consistency, or resilience" in readme_text
     assert "`submitted_pair_outcome`: distinguishes wins, timeout draws, dummy/background-agent wins" in readme_text
     assert "`draw_type`: explains why a pairwise draw occurred" in readme_text
     assert "Feedback files are read-only evidence." in readme_text or "read-only evidence" in readme_text
@@ -521,6 +527,12 @@ def test_v4_readme_spec_has_no_forbidden_terms():
     assert "timeout draw is not a strong success signal" in lower
     assert "both submitted agents lost to a dummy/background agent" in lower
     assert "not as a successful draw" in lower
+    assert "use this feedback package as evidence" in lower
+    assert "start with `public_scoreboard.json`, then `matches/*/match_index.json`, then `matches/*/actions.jsonl`" in lower
+    assert "board/state replay is needed" in lower
+    assert "concrete strategy or behavior change" in lower
+    assert "improve future tournament outcomes against opponents" in lower
+    assert "robustness, consistency, or resilience" in lower
     assert "`submitted_pair_outcome`: distinguishes wins, timeout draws, dummy/background-agent wins" in lower
     assert "`draw_type`: explains why a pairwise draw occurred" in lower
     assert "current post-round codebase" in lower
