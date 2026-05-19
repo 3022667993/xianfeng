@@ -70,7 +70,7 @@ def audit_openclaw_revision_smoke(
         seen.extend([left, right])
         if m.get("background_agents") != ["dummy2", "dummy3"]:
             errors.append("background agents mismatch")
-        for f in ["metadata_path", "scorecard_path", "arena_result_match_a_path", "arena_result_match_b_path"]:
+        for f in ["metadata_path", "scorecard_path", "arena_result_match_a_path"]:
             p = m.get(f)
             if not isinstance(p, str) or not Path(p).exists():
                 errors.append(f"missing artifact {f}")

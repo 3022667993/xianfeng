@@ -4,15 +4,20 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
+from subprocess import TimeoutExpired
 from pathlib import Path
 from typing import Any
 
 
 OPENCLAW_DIR = Path(os.environ.get("OPENCLAW_DIR", "/root/autodl-tmp/external/openclaw"))
 OPENCLAW_TIMEOUT_SECONDS = int(os.environ.get("OPENCLAW_AGENT_TIMEOUT", "600"))
+OPENCLAW_BASE_STATE_DIR = Path(
+    os.environ.get("OPENCLAW_STATE_DIR", str(Path.home() / ".openclaw"))
+).expanduser().resolve()
 
 ALLOWED_TOOLS = {"read", "write", "edit", "exec"}
 
@@ -65,6 +70,14 @@ IGNORED_BOOKKEEPING_CHANGED_FILES = {
     "notes/revision_log.md",
     "revision_audit.json",
 }
+
+ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+CONTEXT_OVERFLOW_RE = re.compile(r"context\s+overflow", flags=re.IGNORECASE)
+ESTIMATED_PROMPT_TOKENS_RE = re.compile(r"estimatedPromptTokens\s*(?:=|≈)\s*([0-9][0-9,]*)", flags=re.IGNORECASE)
+PROMPT_BUDGET_BEFORE_RESERVE_RE = re.compile(
+    r"promptBudgetBeforeReserve\s*(?:=|≈)\s*([0-9][0-9,]*)",
+    flags=re.IGNORECASE,
+)
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -164,11 +177,107 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return candidates[0][2]
 
 
+def _strip_ansi(text: str) -> str:
+    if not isinstance(text, str):
+        return ""
+    return ANSI_ESCAPE_RE.sub("", text)
+
+
+def _first_int_from_pattern(text: str, pattern: re.Pattern[str]) -> int | None:
+    match = pattern.search(text)
+    if match is None:
+        return None
+    raw = match.group(1)
+    digits = "".join(ch for ch in str(raw) if ch.isdigit())
+    if not digits:
+        return None
+    try:
+        return int(digits)
+    except Exception:
+        return None
+
+
+def _extract_context_overflow_metadata(
+    response: dict[str, Any] | None,
+    *,
+    stdout: str,
+    stderr: str,
+) -> dict[str, Any]:
+    meta_error_kind = None
+    if isinstance(response, dict):
+        meta = response.get("meta")
+        if isinstance(meta, dict):
+            err = meta.get("error")
+            if isinstance(err, dict):
+                kind = err.get("kind")
+                if isinstance(kind, str) and kind.strip():
+                    meta_error_kind = kind.strip()
+
+    combined = _strip_ansi(f"{stdout}\n{stderr}")
+    context_overflow_detected = bool(meta_error_kind == "context_overflow" or CONTEXT_OVERFLOW_RE.search(combined))
+    prompt_estimated_tokens = _first_int_from_pattern(combined, ESTIMATED_PROMPT_TOKENS_RE)
+    prompt_budget_before_reserve = _first_int_from_pattern(combined, PROMPT_BUDGET_BEFORE_RESERVE_RE)
+    return {
+        "context_overflow_detected": context_overflow_detected,
+        "prompt_estimated_tokens": prompt_estimated_tokens,
+        "prompt_budget_before_reserve": prompt_budget_before_reserve,
+    }
+
+
+def _resolve_source_openclaw_config_path(source_state_dir: Path) -> Path | None:
+    raw = os.environ.get("OPENCLAW_CONFIG_PATH")
+    if isinstance(raw, str) and raw.strip():
+        candidate = Path(raw.strip()).expanduser()
+        try:
+            candidate = candidate.resolve()
+        except Exception:
+            candidate = candidate.absolute()
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    fallback = source_state_dir / "openclaw.json"
+    if fallback.exists() and fallback.is_file():
+        return fallback
+    return None
+
+
+def _seed_isolated_openclaw_state(
+    *,
+    isolated_state_dir: Path,
+    agent_id: str,
+) -> tuple[Path | None, list[str]]:
+    warnings: list[str] = []
+    isolated_state_dir.mkdir(parents=True, exist_ok=True)
+    source_state_dir = OPENCLAW_BASE_STATE_DIR
+
+    source_config = _resolve_source_openclaw_config_path(source_state_dir)
+    isolated_config_path = isolated_state_dir / "openclaw.json"
+    if source_config is not None:
+        isolated_config_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_config, isolated_config_path)
+    else:
+        warnings.append("source_openclaw_config_missing")
+        isolated_config_path = None
+
+    src_agent_dir = source_state_dir / "agents" / agent_id / "agent"
+    dst_agent_dir = isolated_state_dir / "agents" / agent_id / "agent"
+    if src_agent_dir.exists() and src_agent_dir.is_dir():
+        dst_agent_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src_agent_dir, dst_agent_dir, dirs_exist_ok=True)
+    else:
+        warnings.append(f"source_agent_dir_missing:{src_agent_dir}")
+
+    (isolated_state_dir / "agents" / agent_id / "sessions").mkdir(parents=True, exist_ok=True)
+    return isolated_config_path, warnings
+
+
 def _run_openclaw_agent(
     message: str,
     *,
     agent_id: str,
     provider_model: str | None = None,
+    session_id: str | None = None,
+    session_state_dir: Path | None = None,
+    session_config_path: Path | None = None,
 ) -> tuple[dict[str, Any] | None, str, str, int]:
     commands = [
         [
@@ -201,6 +310,9 @@ def _run_openclaw_agent(
     if provider_model:
         for cmd in commands:
             cmd.extend(["--model", provider_model])
+    if session_id:
+        for cmd in commands:
+            cmd.extend(["--session-id", session_id])
 
     last_stdout = ""
     last_stderr = ""
@@ -216,16 +328,26 @@ def _run_openclaw_agent(
             "OPENCLAW_BOOTSTRAP_BASENAMES",
             "AGENTS.md,TOOLS.md,IDENTITY.md,USER.md",
         )
+        if session_state_dir is not None:
+            env["OPENCLAW_STATE_DIR"] = str(session_state_dir.resolve())
+        if session_config_path is not None:
+            env["OPENCLAW_CONFIG_PATH"] = str(session_config_path.resolve())
 
-        proc = subprocess.run(
-            cmd,
-            cwd=OPENCLAW_DIR,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=OPENCLAW_TIMEOUT_SECONDS + 30,
-        )
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=OPENCLAW_DIR,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=OPENCLAW_TIMEOUT_SECONDS + 30,
+            )
+        except TimeoutExpired as exc:
+            last_stdout = exc.stdout or ""
+            last_stderr = exc.stderr or ""
+            last_code = -1
+            return None, last_stdout, last_stderr, last_code
 
         last_stdout = proc.stdout
         last_stderr = proc.stderr
@@ -243,7 +365,8 @@ def _make_revision_message(
     bootstrap_text: str,
     run_dir: Path,
     codebase_post_t_dir: Path,
-    feedback_copy_path: Path,
+    feedback_copy_path: Path | None,
+    feedback_package_path: Path | None = None,
     side: str,
     game: str,
     regime: str,
@@ -260,13 +383,22 @@ def _make_revision_message(
             "- Do not only write notes or audit files.\n"
         )
     extra_artifacts_block = ""
-    if isinstance(extra_artifact_paths, list) and extra_artifact_paths:
+    if prompt_variant != "neutral" and isinstance(extra_artifact_paths, list) and extra_artifact_paths:
         rendered = []
         for p in extra_artifact_paths:
             if isinstance(p, str) and p.strip():
                 rendered.append(f"  - {p}")
         if rendered:
             extra_artifacts_block = "  - additional round artifacts provided by runner:\n" + "\n".join(rendered) + "\n"
+    feedback_copy_line = ""
+    if prompt_variant != "neutral" and feedback_copy_path is not None:
+        feedback_copy_line = f"- Read feedback from: {feedback_copy_path}\n"
+    feedback_package_task_line = ""
+    if feedback_package_path is not None:
+        feedback_package_task_line = f"- Use the feedback package at: {feedback_package_path}\n"
+    else:
+        feedback_package_task_line = "- feedback package: unavailable\n"
+    feedback_package_line = f"- feedback_package_path: {feedback_package_path}" if feedback_package_path is not None else "- feedback_package_path: unavailable"
     prefix = f"""You are OpenClaw-Minimal running inside a controlled runtime-eval revision executor.
 
 IMPORTANT:
@@ -283,22 +415,14 @@ Experiment:
 - side: {side}
 - run_dir: {run_dir}
 - codebase_post_t_dir: {codebase_post_t_dir}
-- feedback_package_path: {feedback_copy_path}
+{feedback_package_line}
 
 Bootstrap contract:
 {bootstrap_text}
 
 Task:
-- Read feedback from: {feedback_copy_path}
-- Inspect available artifacts in the match/workspace context, including:
-  - agent_feedback_<agent_id>.md
-  - trajectory_summary.json
-  - trajectory_events.json
-  - scorecard.json
-  - arena_result_match_a.json
-  - arena_result_match_b.json
-  - previous notes/revision_log.md if present
-{extra_artifacts_block}- If an artifact listed above exists, inspect it and use it.
+{feedback_copy_line}{feedback_package_task_line}- Inspect the provided feedback package and the current codebase state.
+{extra_artifacts_block}- Do not rely on a long list of internal artifact paths.
 - Inspect bot code at: {codebase_post_t_dir / "submission/main.py"}
 - For Pommerman A00, revise the bot based on the feedback.
 - Only modify: {codebase_post_t_dir / "submission/main.py"}
@@ -589,6 +713,7 @@ def main() -> None:
     parser.add_argument("--bootstrap", required=True)
     parser.add_argument("--codebase-post-dir", required=True)
     parser.add_argument("--feedback-path", required=False)
+    parser.add_argument("--round-idx", required=False, type=int)
     parser.add_argument("--side", required=True)
     parser.add_argument("--game", required=True)
     parser.add_argument("--regime", required=True)
@@ -630,6 +755,16 @@ def main() -> None:
     run_codebase_post_t = run_dir / "codebase_post_t"
     run_feedback_copy = run_dir / "feedback_package.json"
     run_backup_original = run_dir / "codebase_post_original_backup"
+    openclaw_session_state_dir = run_dir / "openclaw_home"
+    openclaw_session_config_path: Path | None = None
+    openclaw_isolation_warnings: list[str] = []
+    openclaw_session_isolated = False
+    openclaw_session_id = (
+        "runtime-eval-"
+        + hashlib.sha256(
+            f"{run_id}:{agent_id}:{time.time_ns()}".encode("utf-8")
+        ).hexdigest()[:24]
+    )
 
     errors: list[str] = []
     response: dict[str, Any] | None = None
@@ -646,23 +781,31 @@ def main() -> None:
     system_prompt_report: dict[str, Any] | None = None
     audit: dict[str, Any] = {}
     previous_winner: str | None = None
+    timeout_seconds = OPENCLAW_TIMEOUT_SECONDS + 30
+    context_overflow_detected = False
+    prompt_estimated_tokens: int | None = None
+    prompt_budget_before_reserve: int | None = None
 
     try:
         bootstrap_text = bootstrap_path.read_text(encoding="utf-8")
         if args.mode == "revision":
-            if feedback_path is None:
-                raise ValueError("feedback_path is required in revision mode")
-            feedback_data = json.loads(feedback_path.read_text(encoding="utf-8"))
-            previous_winner = _extract_previous_winner(feedback_data)
+            if feedback_path is not None:
+                feedback_data = json.loads(feedback_path.read_text(encoding="utf-8"))
+                previous_winner = _extract_previous_winner(feedback_data)
         else:
             feedback_data = {"meta": {"round_idx": 0}, "scorecard": {"left_right_winner": "draw"}}
             previous_winner = None
 
         run_dir.mkdir(parents=True, exist_ok=False)
         shutil.copytree(codebase_post_dir, run_codebase_post_t)
-        if feedback_path is not None:
+        if feedback_path is not None and args.prompt_variant != "neutral":
             shutil.copy2(feedback_path, run_feedback_copy)
         shutil.copytree(codebase_post_dir, run_backup_original)
+        openclaw_session_config_path, openclaw_isolation_warnings = _seed_isolated_openclaw_state(
+            isolated_state_dir=openclaw_session_state_dir,
+            agent_id=agent_id,
+        )
+        openclaw_session_isolated = True
 
         before_temp_snapshot = _snapshot_files(run_codebase_post_t)
         before_original_snapshot = _snapshot_files(codebase_post_dir)
@@ -680,11 +823,17 @@ def main() -> None:
                 prompt_variant=args.prompt_variant,
             )
         else:
+            feedback_package_path = None
+            if args.round_idx is not None:
+                candidate = run_codebase_post_t / "feedback" / f"round_{int(args.round_idx)}"
+                if candidate.exists():
+                    feedback_package_path = candidate
             message = _make_revision_message(
                 bootstrap_text=bootstrap_text,
                 run_dir=run_dir,
                 codebase_post_t_dir=run_codebase_post_t,
-                feedback_copy_path=run_feedback_copy,
+                feedback_copy_path=run_feedback_copy if run_feedback_copy.exists() else None,
+                feedback_package_path=feedback_package_path,
                 side=args.side,
                 game=args.game,
                 regime=args.regime,
@@ -697,7 +846,18 @@ def main() -> None:
             message,
             agent_id=agent_id,
             provider_model=provider_model,
+            session_id=openclaw_session_id,
+            session_state_dir=openclaw_session_state_dir,
+            session_config_path=openclaw_session_config_path,
         )
+        overflow_meta = _extract_context_overflow_metadata(
+            response,
+            stdout=stdout,
+            stderr=stderr,
+        )
+        context_overflow_detected = bool(overflow_meta.get("context_overflow_detected"))
+        prompt_estimated_tokens = overflow_meta.get("prompt_estimated_tokens")
+        prompt_budget_before_reserve = overflow_meta.get("prompt_budget_before_reserve")
 
         after_temp_snapshot = _snapshot_files(run_codebase_post_t)
         changed_files_temp = _changed_files(before_temp_snapshot, after_temp_snapshot)
@@ -718,7 +878,12 @@ def main() -> None:
             system_prompt_report = meta.get("systemPromptReport")
 
         if returncode != 0:
-            errors.append(f"openclaw agent failed with returncode={returncode}")
+            if returncode == -1 and "timed out" not in " ".join(errors):
+                errors.append("openclaw timeout")
+            else:
+                errors.append(f"openclaw agent failed with returncode={returncode}")
+        if context_overflow_detected:
+            errors.append("openclaw context overflow")
         if response is None:
             errors.append("openclaw agent did not return parseable JSON")
         if not audit.get("rawSystemPromptReportPresent"):
@@ -769,6 +934,14 @@ def main() -> None:
             "actualModel": actual_model,
             "providerRouteStatus": provider_route_status,
             "runDir": str(run_dir),
+            "openclaw_session_isolated": openclaw_session_isolated,
+            "openclaw_session_state_dir": str(openclaw_session_state_dir),
+            "openclaw_session_config_path": str(openclaw_session_config_path) if openclaw_session_config_path is not None else None,
+            "openclaw_session_id": openclaw_session_id,
+            "openclaw_isolation_warnings": openclaw_isolation_warnings,
+            "context_overflow_detected": context_overflow_detected,
+            "prompt_estimated_tokens": prompt_estimated_tokens,
+            "prompt_budget_before_reserve": prompt_budget_before_reserve,
             "game": args.game,
             "regime": args.regime,
             "side": args.side,
@@ -782,6 +955,8 @@ def main() -> None:
             "scorecard": feedback_data.get("scorecard", {}) if isinstance(feedback_data, dict) else {},
             "openclawDir": str(OPENCLAW_DIR),
             "openclawReturnCode": returncode,
+            "openclawTimeoutSeconds": timeout_seconds,
+            "openclawTimeout": returncode == -1,
             "openclawStdoutTail": stdout[-4000:],
             "openclawStderrTail": stderr[-4000:],
             "systemPromptReport": system_prompt_report,
@@ -813,6 +988,15 @@ def main() -> None:
             "actual_provider": actual_provider,
             "actual_model": actual_model,
             "provider_route_status": provider_route_status,
+            "openclaw_timeout": returncode == -1,
+            "openclaw_timeout_seconds": timeout_seconds,
+            "openclaw_session_isolated": openclaw_session_isolated,
+            "openclaw_session_state_dir": str(openclaw_session_state_dir),
+            "openclaw_session_id": openclaw_session_id,
+            "openclaw_isolation_warnings": openclaw_isolation_warnings,
+            "context_overflow_detected": context_overflow_detected,
+            "prompt_estimated_tokens": prompt_estimated_tokens,
+            "prompt_budget_before_reserve": prompt_budget_before_reserve,
             "openclaw_default_missing_placeholders": audit.get("openclawDefaultMissingPlaceholders", []),
             "audit_warnings": [],
             "audit_errors": errors,
@@ -840,6 +1024,14 @@ def main() -> None:
             "providerModel": provider_model,
             "requestedProviderModel": provider_model,
             "runDir": str(run_dir),
+            "openclaw_session_isolated": openclaw_session_isolated,
+            "openclaw_session_state_dir": str(openclaw_session_state_dir),
+            "openclaw_session_config_path": str(openclaw_session_config_path) if openclaw_session_config_path is not None else None,
+            "openclaw_session_id": openclaw_session_id,
+            "openclaw_isolation_warnings": openclaw_isolation_warnings,
+            "context_overflow_detected": context_overflow_detected,
+            "prompt_estimated_tokens": prompt_estimated_tokens,
+            "prompt_budget_before_reserve": prompt_budget_before_reserve,
             "game": args.game,
             "regime": args.regime,
             "side": args.side,
@@ -870,6 +1062,16 @@ def main() -> None:
                     "actual_provider": None,
                     "actual_model": None,
                     "provider_route_status": "unknown",
+                    "openclaw_timeout": True,
+                    "openclaw_timeout_seconds": timeout_seconds,
+                    "openclawTimeoutSeconds": timeout_seconds,
+                    "openclaw_session_isolated": openclaw_session_isolated,
+                    "openclaw_session_state_dir": str(openclaw_session_state_dir),
+                    "openclaw_session_id": openclaw_session_id,
+                    "openclaw_isolation_warnings": openclaw_isolation_warnings,
+                    "context_overflow_detected": context_overflow_detected,
+                    "prompt_estimated_tokens": prompt_estimated_tokens,
+                    "prompt_budget_before_reserve": prompt_budget_before_reserve,
                     "openclaw_default_missing_placeholders": [],
                     "audit_warnings": [],
                     "audit_errors": [repr(exc)],

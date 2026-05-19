@@ -39,7 +39,7 @@ def _write_manifest(tmp_path, manifest: dict):
 def test_builder_counts_and_policy():
     manifest = build_manifest(_models_cfg(), _tournament_cfg())
     assert manifest["num_models"] == 6
-    assert manifest["total_rounds"] == 10
+    assert manifest["full_double_rr_rounds"] == 10
     assert manifest["total_matches"] == 30
     assert len(manifest["pairs"]) == 15
     assert len(manifest["rounds"]) == 10

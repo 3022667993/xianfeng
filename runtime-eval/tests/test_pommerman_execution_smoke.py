@@ -30,7 +30,7 @@ def test_execution_smoke_round_is_perfect_matching():
 def _mk_match(round_dir: Path, idx: int, left: str, right: str):
     match_dir = round_dir / f"match_{idx}"
     match_dir.mkdir(parents=True, exist_ok=True)
-    for name in ["metadata.json", "scorecard.json", "arena_result_match_a.json", "arena_result_match_b.json"]:
+    for name in ["metadata.json", "scorecard.json", "arena_result_match_a.json"]:
         (match_dir / name).write_text("{}", encoding="utf-8")
     return {
         "match_id": f"match_{idx}",
@@ -48,7 +48,6 @@ def _mk_match(round_dir: Path, idx: int, left: str, right: str):
         "metadata_path": str(match_dir / "metadata.json"),
         "scorecard_path": str(match_dir / "scorecard.json"),
         "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-        "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
     }
 
 

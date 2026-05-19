@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import gzip
+import hashlib
 from pathlib import Path
 
 
@@ -161,6 +163,79 @@ def _load_initial_synthesis_by_agent() -> tuple[dict[str, dict], int]:
     return by_agent, len(hashes)
 
 
+def _infer_tournament_name() -> str | None:
+    ism = Path("logs/initial_synthesis_manifest.json")
+    if ism.exists():
+        try:
+            payload = _load_json(ism)
+            value = payload.get("tournament")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        except Exception:
+            pass
+    posts_root = Path("workspace/posts")
+    if posts_root.exists():
+        candidates = sorted(p.name for p in posts_root.iterdir() if p.is_dir())
+        if len(candidates) == 1:
+            return candidates[0]
+    return None
+
+
+def _sha256_file(path: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _count_gz_jsonl_rows(path: Path) -> int:
+    if not path.exists():
+        return 0
+    count = 0
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                count += 1
+    return count
+
+
+def _feedback_package_metrics(*, tournament_name: str, agent_id: str, round_idx: int) -> tuple[str, str, str, str]:
+    root = Path("workspace/posts") / tournament_name / agent_id / f"codebase_post_{round_idx}" / "feedback" / f"round_{round_idx}"
+    if not root.exists():
+        return "False", "0", "0", "n/a"
+    matches_dir = root / "matches"
+    match_dirs = sorted(p for p in matches_dir.iterdir() if p.is_dir()) if matches_dir.exists() else []
+    replay_rows_total = 0
+    for md in match_dirs:
+        replay_rows_total += _count_gz_jsonl_rows(md / "replay_match_a.jsonl.gz")
+        replay_rows_total += _count_gz_jsonl_rows(md / "replay_match_b.jsonl.gz")
+    checksums_path = root / "checksums.json"
+    checksum_ok = "n/a"
+    if checksums_path.exists():
+        try:
+            payload = _load_json(checksums_path)
+            files = payload.get("files", {})
+            ok = True
+            if isinstance(files, dict):
+                for rel, digest in files.items():
+                    if not isinstance(rel, str) or not isinstance(digest, str):
+                        ok = False
+                        break
+                    actual = _sha256_file(root / rel)
+                    if actual is None or actual != digest:
+                        ok = False
+                        break
+            else:
+                ok = False
+            checksum_ok = "True" if ok else "False"
+        except Exception:
+            checksum_ok = "False"
+    return "True", str(len(match_dirs)), str(replay_rows_total), checksum_ok
+
+
 def main() -> int:
     logs = Path("logs")
     if not logs.exists():
@@ -174,6 +249,8 @@ def main() -> int:
 
     prop_lookup = _build_propagation_lookup()
     init_lookup, unique_initial_hashes = _load_initial_synthesis_by_agent()
+    tournament_name = _infer_tournament_name()
+    tournament_report_path = str(Path("logs/tournament_report.json")) if Path("logs/tournament_report.json").exists() else "n/a"
     rows: list[list[str]] = []
     header = [
         "round",
@@ -197,6 +274,11 @@ def main() -> int:
         "stop_action_rate",
         "average_terminal_step",
         "non_draw_match_count",
+        "feedback_package_present",
+        "replay_package_match_count",
+        "replay_rows_total",
+        "checksum_ok",
+        "tournament_report_path",
     ]
 
     for round_idx in rounds:
@@ -218,6 +300,11 @@ def main() -> int:
                 continue
             aid = str(a.get("agent_id"))
             init = init_lookup.get(aid, {})
+            fp_present, fp_match_count, fp_replay_rows_total, fp_checksum_ok = (
+                _feedback_package_metrics(tournament_name=tournament_name, agent_id=aid, round_idx=round_idx)
+                if isinstance(tournament_name, str) and tournament_name
+                else ("n/a", "n/a", "n/a", "n/a")
+            )
             rows.append(
                 [
                     str(round_idx),
@@ -241,6 +328,11 @@ def main() -> int:
                     stop_rate,
                     avg_terminal_step,
                     non_draw_count,
+                    fp_present,
+                    fp_match_count,
+                    fp_replay_rows_total,
+                    fp_checksum_ok,
+                    tournament_report_path,
                 ]
             )
 

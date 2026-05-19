@@ -53,6 +53,10 @@ def _compact_leg_metrics(match_dir: Path, leg_label: str, tested_side: str) -> d
     }
 
 
+def _has_match_b(match_dir: Path) -> bool:
+    return (match_dir / "arena_result_match_b.json").exists() or (match_dir / "trajectory_compact_match_b.jsonl").exists()
+
+
 def _seat_result(leg: dict, side: str) -> str:
     winner = _winner_from_lr(leg.get("left_right_winner"))
     if winner == "draw":
@@ -62,125 +66,40 @@ def _seat_result(leg: dict, side: str) -> str:
     return "win" if winner == side else "loss"
 
 
-def _dummy_win(leg: dict) -> bool:
-    winners = (leg.get("info") or {}).get("winners")
-    seat_assignment = leg.get("seat_assignment") or {}
-    if not isinstance(winners, list):
-        return False
-    for w in winners:
-        key = f"seat_{w}_submission"
-        if seat_assignment.get(key) in {"dummy2", "dummy3"}:
-            return True
-    return False
-
-
-def _tested_result_by_winners(leg: dict, tested_side: str) -> str:
-    winners = (leg.get("info") or {}).get("winners")
-    seat_assignment = leg.get("seat_assignment") or {}
-    if isinstance(winners, list):
-        winner_seats = set()
-        for w in winners:
-            key = f"seat_{w}_submission"
-            winner_seats.add(seat_assignment.get(key))
-        if tested_side in winner_seats:
-            return "win"
-        if winner_seats & {"dummy2", "dummy3"}:
-            return "loss"
-        lr = _winner_from_lr(leg.get("left_right_winner"))
-        if lr == "draw":
-            return "draw"
-        if lr in {"left", "right"}:
-            return "loss"
-    return _seat_result(leg, tested_side)
-
-
 def build_trajectory_summary(match_dir: Path, round_idx: int, match_idx: int) -> dict:
     md = load_json(match_dir / "metadata.json")
     sc = load_json(match_dir / "scorecard.json")
     leg_a = load_json(match_dir / "arena_result_match_a.json")
-    leg_b = load_json(match_dir / "arena_result_match_b.json")
 
     left_agent_id = str(md.get("left_agent_id"))
     right_agent_id = str(md.get("right_agent_id"))
     pair_id = str(md.get("pair_id"))
     match_id = str(md.get("match_id") or f"match_{match_idx}")
 
-    legs = []
-    for label, leg, path in [
-        ("match_a", leg_a, match_dir / "arena_result_match_a.json"),
-        ("match_b", leg_b, match_dir / "arena_result_match_b.json"),
-    ]:
-        left_result = _tested_result_by_winners(leg, "left")
-        right_result = _tested_result_by_winners(leg, "right")
-        legs.append(
-            {
-                "label": label,
-                "path": str(path),
-                "steps": int(leg.get("steps", -1) or -1),
-                "done": bool(leg.get("done", False)),
-                "reward": leg.get("reward"),
-                "winner_seats": ((leg.get("info") or {}).get("winners") if isinstance(leg.get("info"), dict) else None),
-                "left_right_winner": _winner_from_lr(leg.get("left_right_winner")),
-                "seat_assignment": leg.get("seat_assignment", {}),
-                "tested_left_result": left_result,
-                "tested_right_result": right_result,
-                "dummy_win": _dummy_win(leg),
-            }
-        )
-
-    same_seed = legs[0].get("path") and (leg_a.get("requested_seed") == leg_b.get("requested_seed"))
-    outcome_changed_under_swap = legs[0]["left_right_winner"] != legs[1]["left_right_winner"]
-    tested_win_any = any(x in {"win"} for x in [legs[0]["tested_left_result"], legs[0]["tested_right_result"], legs[1]["tested_left_result"], legs[1]["tested_right_result"]])
-
-    def _agent_summary(agent_id: str, side_key: str) -> dict:
-        results = [legs[0][f"tested_{side_key}_result"], legs[1][f"tested_{side_key}_result"]]
-        wins = sum(1 for r in results if r == "win")
-        losses = sum(1 for r in results if r == "loss")
-        draws = sum(1 for r in results if r == "draw")
-        best_leg = None
-        worst_leg = None
-        if "win" in results:
-            best_leg = legs[results.index("win")]["label"]
-        elif "draw" in results:
-            best_leg = legs[results.index("draw")]["label"]
-        if "loss" in results:
-            worst_leg = legs[results.index("loss")]["label"]
-        factual = [
-            f"Observed {wins} win(s), {losses} loss(es), {draws} draw(s) across match_a/match_b.",
-            f"Seat-swap winners: match_a={legs[0]['left_right_winner']}, match_b={legs[1]['left_right_winner']}.",
-            f"Leg lengths (steps): match_a={legs[0]['steps']}, match_b={legs[1]['steps']}.",
-        ]
-        seat_sensitivity = outcome_changed_under_swap
-        hints = ["Keep survival-first behavior when no safe advantage is visible."]
-        if seat_sensitivity:
-            hints.append(
-                "Treat seat-swap instability as a signal to improve robustness across spawn positions."
-            )
-        else:
-            hints.append(
-                "Maintain robustness across swapped spawn positions; no seat-swap outcome change was observed in this match."
-            )
-        return {
-            "agent_id": agent_id,
-            "roles_seen": ["left", "right"],
-            "wins": wins,
-            "losses": losses,
-            "draws": draws,
-            "best_leg": best_leg,
-            "worst_leg": worst_leg,
-            "survival_steps_observed": [legs[0]["steps"], legs[1]["steps"]],
-            "seat_sensitivity_observed": seat_sensitivity,
-            "dummy_interference_observed": any(l["dummy_win"] for l in legs),
-            "factual_observations": factual,
-            "next_round_hints": hints,
-        }
+    left_result = _seat_result(leg_a, "left")
+    right_result = _seat_result(leg_a, "right")
+    leg = {
+        "label": "match_a",
+        "path": str(match_dir / "arena_result_match_a.json"),
+        "steps": int(leg_a.get("steps", -1) or -1),
+        "done": bool(leg_a.get("done", False)),
+        "reward": leg_a.get("reward"),
+        "winner_seats": ((leg_a.get("info") or {}).get("winners") if isinstance(leg_a.get("info"), dict) else None),
+        "left_right_winner": _winner_from_lr(leg_a.get("left_right_winner")),
+        "seat_assignment": leg_a.get("seat_assignment", {}),
+        "tested_left_result": left_result,
+        "tested_right_result": right_result,
+        "dummy_win": False,
+    }
 
     summary = {
-        "schema_version": "pommerman_process_feedback_v1",
+        "schema_version": "pommerman_process_feedback_v2",
         "round_idx": int(round_idx),
         "match_idx": int(match_idx),
         "match_id": match_id,
         "pair_id": pair_id,
+        "schedule_mode": "double_round_robin",
+        "match_legs": "single",
         "left_agent_id": left_agent_id,
         "right_agent_id": right_agent_id,
         "background_agents": md.get("background_agents", ["dummy2", "dummy3"]),
@@ -190,30 +109,56 @@ def build_trajectory_summary(match_dir: Path, round_idx: int, match_idx: int) ->
         "applied_seed": md.get("applied_seed", sc.get("applied_seed")),
         "seed_control_status": md.get("seed_control_status", sc.get("seed_control_status", "unknown")),
         "seed_control_error": md.get("seed_control_error", sc.get("seed_control_error")),
-        "seed_control_methods_attempted": md.get(
-            "seed_control_methods_attempted", sc.get("seed_control_methods_attempted", [])
-        ),
-        "seed_control_method_applied": md.get(
-            "seed_control_method_applied", sc.get("seed_control_method_applied")
-        ),
-        "seed_control_env_seed_return": md.get(
-            "seed_control_env_seed_return", sc.get("seed_control_env_seed_return")
-        ),
-        "legs": legs,
+        "seed_control_methods_attempted": md.get("seed_control_methods_attempted", sc.get("seed_control_methods_attempted", [])),
+        "seed_control_method_applied": md.get("seed_control_method_applied", sc.get("seed_control_method_applied")),
+        "seed_control_env_seed_return": md.get("seed_control_env_seed_return", sc.get("seed_control_env_seed_return")),
+        "legs": [leg],
         "seat_swap_summary": {
-            "same_requested_seed": bool(same_seed),
-            "match_a_left_right_winner": legs[0]["left_right_winner"],
-            "match_b_left_right_winner": legs[1]["left_right_winner"],
-            "outcome_changed_under_swap": outcome_changed_under_swap,
-            "dummy_win_any_leg": any(l["dummy_win"] for l in legs),
-            "tested_agent_win_any_leg": tested_win_any,
-            "both_tested_agents_lost_any_leg": any(
-                (l["tested_left_result"] == "loss" and l["tested_right_result"] == "loss") for l in legs
-            ),
+            "same_requested_seed": True,
+            "match_a_left_right_winner": leg["left_right_winner"],
+            "match_b_left_right_winner": None,
+            "outcome_changed_under_swap": None if not _has_match_b(match_dir) else False,
+            "dummy_win_any_leg": False,
+            "tested_agent_win_any_leg": any(x in {"win"} for x in [left_result, right_result]),
+            "both_tested_agents_lost_any_leg": bool(left_result == "loss" and right_result == "loss"),
         },
         "agent_summaries": {
-            left_agent_id: _agent_summary(left_agent_id, "left"),
-            right_agent_id: _agent_summary(right_agent_id, "right"),
+            left_agent_id: {
+                "agent_id": left_agent_id,
+                "roles_seen": ["left"],
+                "wins": int(left_result == "win"),
+                "losses": int(left_result == "loss"),
+                "draws": int(left_result == "draw"),
+                "best_leg": "match_a" if left_result in {"win", "draw"} else None,
+                "worst_leg": "match_a" if left_result == "loss" else None,
+                "survival_steps_observed": [leg["steps"]],
+                "seat_sensitivity_observed": None,
+                "dummy_interference_observed": False,
+                "factual_observations": [
+                    f"Observed {int(left_result == 'win')} win(s), {int(left_result == 'loss')} loss(es), {int(left_result == 'draw')} draw(s) in match_a.",
+                    f"Single-leg result: match_a={leg['left_right_winner']}.",
+                    f"Leg length (steps): match_a={leg['steps']}.",
+                ],
+                "next_round_hints": ["Keep survival-first behavior when no safe advantage is visible."],
+            },
+            right_agent_id: {
+                "agent_id": right_agent_id,
+                "roles_seen": ["right"],
+                "wins": int(right_result == "win"),
+                "losses": int(right_result == "loss"),
+                "draws": int(right_result == "draw"),
+                "best_leg": "match_a" if right_result in {"win", "draw"} else None,
+                "worst_leg": "match_a" if right_result == "loss" else None,
+                "survival_steps_observed": [leg["steps"]],
+                "seat_sensitivity_observed": None,
+                "dummy_interference_observed": False,
+                "factual_observations": [
+                    f"Observed {int(right_result == 'win')} win(s), {int(right_result == 'loss')} loss(es), {int(right_result == 'draw')} draw(s) in match_a.",
+                    f"Single-leg result: match_a={leg['left_right_winner']}.",
+                    f"Leg length (steps): match_a={leg['steps']}.",
+                ],
+                "next_round_hints": ["Keep survival-first behavior when no safe advantage is visible."],
+            },
         },
     }
     return summary
@@ -224,43 +169,22 @@ def build_agent_feedback(summary: dict, agent_id: str, match_dir: Path) -> dict:
     right = summary["right_agent_id"]
     side = "left" if agent_id == left else "right"
     opp = right if side == "left" else left
-    leg_results = []
-    for leg in summary["legs"]:
-        leg_results.append({
-            "label": leg["label"],
-            "result": leg[f"tested_{side}_result"],
-            "left_right_winner": leg["left_right_winner"],
-            "steps": leg["steps"],
-        })
-    wins = sum(1 for x in leg_results if x["result"] == "win")
-    losses = sum(1 for x in leg_results if x["result"] == "loss")
-    draws = sum(1 for x in leg_results if x["result"] == "draw")
+    leg = summary["legs"][0]
+    result = leg[f"tested_{side}_result"]
     m_a = _compact_leg_metrics(match_dir, "match_a", side)
-    m_b = _compact_leg_metrics(match_dir, "match_b", side)
-    steps_total = int(m_a["step_count"]) + int(m_b["step_count"])
-    bomb_rate = (
-        ((m_a["bomb_action_rate"] * int(m_a["step_count"])) + (m_b["bomb_action_rate"] * int(m_b["step_count"]))) / steps_total
-        if steps_total > 0
-        else 0.0
-    )
-    stop_rate = (
-        ((m_a["stop_action_rate"] * int(m_a["step_count"])) + (m_b["stop_action_rate"] * int(m_b["step_count"]))) / steps_total
-        if steps_total > 0
-        else 0.0
-    )
-    terminal_steps = [x["steps"] for x in leg_results if isinstance(x.get("steps"), int) and x.get("steps", -1) >= 0]
-    avg_terminal_step = (sum(terminal_steps) / len(terminal_steps)) if terminal_steps else 0.0
-    non_draw_match_count = sum(1 for x in leg_results if x["result"] in {"win", "loss"})
+    steps_total = int(m_a["step_count"])
+    bomb_rate = m_a["bomb_action_rate"] if steps_total > 0 else 0.0
+    stop_rate = m_a["stop_action_rate"] if steps_total > 0 else 0.0
     diag = {
-        "seat_sensitivity_observed": bool(summary["agent_summaries"][agent_id]["seat_sensitivity_observed"]),
-        "dummy_interference_observed": bool(summary["agent_summaries"][agent_id]["dummy_interference_observed"]),
+        "seat_sensitivity_observed": False,
+        "dummy_interference_observed": False,
         "both_tested_agents_lost_any_leg": bool(summary["seat_swap_summary"]["both_tested_agents_lost_any_leg"]),
-        "short_game_loss_observed": any(x["result"] == "loss" and isinstance(x["steps"], int) and x["steps"] <= 100 for x in leg_results),
-        "long_game_win_observed": any(x["result"] == "win" and isinstance(x["steps"], int) and x["steps"] >= 250 for x in leg_results),
+        "short_game_loss_observed": bool(result == "loss" and isinstance(leg["steps"], int) and leg["steps"] <= 100),
+        "long_game_win_observed": bool(result == "win" and isinstance(leg["steps"], int) and leg["steps"] >= 250),
         "bomb_action_rate": round(bomb_rate, 6),
         "stop_action_rate": round(stop_rate, 6),
-        "average_terminal_step": round(avg_terminal_step, 3),
-        "non_draw_match_count": int(non_draw_match_count),
+        "average_terminal_step": round(float(leg["steps"]), 3),
+        "non_draw_match_count": int(result in {"win", "loss"}),
     }
     compact_events_path = match_dir / "trajectory_events.json"
     compact_events = None
@@ -271,28 +195,28 @@ def build_agent_feedback(summary: dict, agent_id: str, match_dir: Path) -> dict:
             compact_events = None
     compact_v2 = None
     if isinstance(compact_events, dict):
-        legs = compact_events.get("legs", {})
         compact_v2 = {
             "events_path": str(compact_events_path),
-            "match_a": legs.get("match_a", {}),
-            "match_b": legs.get("match_b", {}),
+            "match_a": compact_events.get("legs", {}).get("match_a", {}),
             "limitations": compact_events.get("limitations", []),
         }
 
     if compact_v2 is not None:
         limitations = [
-            "process_feedback_v1 is derived from result-level arena artifacts and compact trajectory v2 when available",
+            "process_feedback_v2 is derived from result-level arena artifacts and compact trajectory v2 when available",
             "compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
             "full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
+            "seat-swap instability is not applicable in single-leg mode",
         ]
     else:
         limitations = [
-            "process_feedback_v1 is derived from result-level arena artifacts only",
+            "process_feedback_v2 is derived from result-level arena artifacts only",
             "tick-level actions, board states, bomb events, and death causes are not yet recorded",
+            "seat-swap instability is not applicable in single-leg mode",
         ]
 
     return {
-        "schema_version": "pommerman_agent_feedback_v1",
+        "schema_version": "pommerman_agent_feedback_v2",
         "round_idx": summary["round_idx"],
         "match_idx": summary["match_idx"],
         "match_id": summary["match_id"],
@@ -303,14 +227,13 @@ def build_agent_feedback(summary: dict, agent_id: str, match_dir: Path) -> dict:
             "metadata": str(match_dir / "metadata.json"),
             "scorecard": str(match_dir / "scorecard.json"),
             "arena_result_match_a": str(match_dir / "arena_result_match_a.json"),
-            "arena_result_match_b": str(match_dir / "arena_result_match_b.json"),
             "trajectory_summary": str(match_dir / "trajectory_summary.json"),
         },
         "result_summary": {
-            "wins": wins,
-            "losses": losses,
-            "draws": draws,
-            "legs": leg_results,
+            "wins": int(result == "win"),
+            "losses": int(result == "loss"),
+            "draws": int(result == "draw"),
+            "legs": [{"label": "match_a", "result": result, "left_right_winner": leg["left_right_winner"], "steps": leg["steps"]}],
         },
         "diagnostics": diag,
         "factual_observations": list(summary["agent_summaries"][agent_id]["factual_observations"]),
@@ -329,11 +252,11 @@ def _feedback_md(payload: dict) -> str:
     rs = payload["result_summary"]
     lines.append(f"- Totals: wins={rs['wins']}, losses={rs['losses']}, draws={rs['draws']}")
     lines.append("")
-    lines.append("## Outcome By Leg")
+    lines.append("## Outcome")
     for leg in rs["legs"]:
         lines.append(f"- {leg['label']}: result={leg['result']}, left_right_winner={leg['left_right_winner']}, steps={leg['steps']}")
     lines.append("")
-    lines.append("## Seat-Swap Diagnostics")
+    lines.append("## Diagnostics")
     d = payload["diagnostics"]
     for k in ["seat_sensitivity_observed", "dummy_interference_observed", "both_tested_agents_lost_any_leg", "short_game_loss_observed", "long_game_win_observed"]:
         lines.append(f"- {k}: {d[k]}")
@@ -354,12 +277,10 @@ def _feedback_md(payload: dict) -> str:
         lines.append("- compact trajectory v2 artifact not available for this match")
     else:
         lines.append(f"- events_path: {c.get('events_path')}")
-        for leg_label in ["match_a", "match_b"]:
-            leg = c.get(leg_label, {})
-            if not isinstance(leg, dict):
-                continue
+        leg = c.get("match_a", {})
+        if isinstance(leg, dict):
             lines.append(
-                f"- {leg_label}: capture_status={leg.get('capture_status')}, step_count={leg.get('step_count')}, terminal_step={leg.get('terminal_step')}, first_reward_change_step={leg.get('first_reward_change_step')}, alive_change_steps={leg.get('alive_change_steps')}"
+                f"- match_a: capture_status={leg.get('capture_status')}, step_count={leg.get('step_count')}, terminal_step={leg.get('terminal_step')}, first_reward_change_step={leg.get('first_reward_change_step')}, alive_change_steps={leg.get('alive_change_steps')}"
             )
         lims = c.get("limitations", [])
         if isinstance(lims, list):

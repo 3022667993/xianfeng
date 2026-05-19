@@ -9,7 +9,7 @@ import sys
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from runner.core.schedule import build_two_cycle_schedule
+from runner.core.schedule import build_double_round_robin
 
 
 def _load_yaml(path: Path) -> dict:
@@ -26,6 +26,8 @@ def build_manifest(models_cfg: dict, tournament_cfg: dict) -> dict:
     models = models_cfg.get("models", []) if isinstance(models_cfg, dict) else []
     if not isinstance(models, list) or len(models) < 2:
         raise ValueError("formal schedule requires at least 2 models")
+    if len(models) % 2 == 1:
+        raise ValueError("double_round_robin requires an even number of agents; BYE scheduling is not implemented yet.")
 
     model_entries: list[dict] = []
     for idx, m in enumerate(models, start=1):
@@ -45,12 +47,12 @@ def build_manifest(models_cfg: dict, tournament_cfg: dict) -> dict:
 
     background_agents = ["dummy2", "dummy3"]
     base_seed = int(tournament_cfg.get("base_seed", tournament_cfg.get("seed", 1001)))
-    schedule = build_two_cycle_schedule([m["id"] for m in model_entries])
+    num_rounds = int(tournament_cfg.get("num_rounds", 0) or 0)
+    schedule = build_double_round_robin([m["id"] for m in model_entries], num_rounds=num_rounds)
 
     rounds = []
     pairs_by_id: dict[str, dict] = {}
-    cycle1_pair_order: list[str] = list(schedule["cycle_1_pair_order"])
-    cycle2_pair_order: list[str] = list(schedule["cycle_2_pair_order"])
+    pair_order_by_cycle = schedule["pair_order_by_cycle"]
 
     for round_item in schedule["rounds"]:
         round_idx = int(round_item["round_idx"])
@@ -64,9 +66,6 @@ def build_manifest(models_cfg: dict, tournament_cfg: dict) -> dict:
             agent_b = str(m["agent_B"])
             pair_id = str(m["pair_id"])
             planned_seed = _stable_pair_seed(pair_id, base_seed)
-            agent_a_seat = str(m["agent_A_seat"])
-            agent_b_seat = str(m["agent_B_seat"])
-
             match_payload = {
                 "cycle": cycle,
                 "round_idx": round_idx,
@@ -76,8 +75,17 @@ def build_manifest(models_cfg: dict, tournament_cfg: dict) -> dict:
                 "agent_B": agent_b,
                 "left_agent": left_id,
                 "right_agent": right_id,
-                "agent_A_seat": agent_a_seat,
-                "agent_B_seat": agent_b_seat,
+                "agent_A_seat": str(m["agent_A_seat"]),
+                "agent_B_seat": str(m["agent_B_seat"]),
+                "encounter_index": int(m["encounter_index"]),
+                "reverse_of_round": m.get("reverse_of_round"),
+                "reverse_of_match": m.get("reverse_of_match"),
+                "schedule_mode": "double_round_robin",
+                "match_legs": "single",
+                "num_agents": schedule["num_agents"],
+                "full_double_rr_rounds": schedule["full_double_rr_rounds"],
+                "emitted_rounds": schedule["emitted_rounds"],
+                "complete_double_round_robin": schedule["complete_double_round_robin"],
                 "background_agents": background_agents,
                 "planned_seed": planned_seed,
                 "applied_seed": None,
@@ -103,8 +111,11 @@ def build_manifest(models_cfg: dict, tournament_cfg: dict) -> dict:
                     "cycle": cycle,
                     "round_idx": round_idx,
                     "match_idx": match_idx,
-                    "agent_A_seat": agent_a_seat,
-                    "agent_B_seat": agent_b_seat,
+                    "agent_A_seat": str(m["agent_A_seat"]),
+                    "agent_B_seat": str(m["agent_B_seat"]),
+                    "encounter_index": int(m["encounter_index"]),
+                    "reverse_of_round": m.get("reverse_of_round"),
+                    "reverse_of_match": m.get("reverse_of_match"),
                     "planned_seed": planned_seed,
                     "applied_seed": None,
                     "seed": None,
@@ -119,29 +130,30 @@ def build_manifest(models_cfg: dict, tournament_cfg: dict) -> dict:
                 "round_idx": round_idx,
                 "cycle": cycle,
                 "matches": match_entries,
-                "bye_agent": round_item.get("bye_agent"),
             }
         )
 
     return {
-        "schema_version": "pommerman_formal_schedule_manifest_v1",
+        "schema_version": "pommerman_formal_schedule_manifest_v2",
         "game": "pommerman_1v1",
         "regime": "A00",
         "tournament": tournament_cfg.get("name", "pommerman_gptv16_a00_6model_schedule_smoke"),
-        "schedule_type": "two_cycle_double_round_robin",
+        "schedule_mode": "double_round_robin",
+        "match_legs": "single",
         "num_models": schedule["num_agents"],
         "matches_per_round": schedule["matches_per_round"],
-        "total_rounds": schedule["total_rounds"],
+        "total_rounds": schedule["emitted_rounds"],
+        "full_double_rr_rounds": schedule["full_double_rr_rounds"],
+        "emitted_rounds": schedule["emitted_rounds"],
+        "complete_double_round_robin": schedule["complete_double_round_robin"],
         "total_matches": schedule["total_matches"],
-        "cycle_1_rounds": list(range(1, int(schedule["rounds_per_cycle"]) + 1)),
-        "cycle_2_rounds": list(range(int(schedule["rounds_per_cycle"]) + 1, int(schedule["total_rounds"]) + 1)),
+        "canonical_pairs_count": schedule["canonical_pairs_count"],
         "background_agents": background_agents,
         "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
         "models": model_entries,
         "rounds": rounds,
         "pairs": [pairs_by_id[k] for k in sorted(pairs_by_id)],
-        "cycle_1_pair_order": cycle1_pair_order,
-        "cycle_2_pair_order": cycle2_pair_order,
+        "pair_order_by_cycle": pair_order_by_cycle,
     }
 
 

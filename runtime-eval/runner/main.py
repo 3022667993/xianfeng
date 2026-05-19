@@ -12,7 +12,7 @@ from runner.core.artifacts import ensure_round_dir, write_json
 from runner.core.config import load_yaml, require_keys
 from runner.core.fsops import copy_tree
 from runner.core.revision import apply_minimal_initial_synthesis, apply_minimal_revision, apply_noop_revision, write_diff_patch
-from runner.core.schedule import build_two_cycle_schedule
+from runner.core.schedule import build_double_round_robin
 from runner.core.pommerman_feedback import write_feedback_artifact_mirrors, write_process_feedback
 
 
@@ -63,7 +63,7 @@ def _write_round_seed_provenance(
     seed_control_env_seed_return: object | None = None,
 ) -> None:
     existing_payloads: list[dict[str, object]] = []
-    for name in ("arena_result_match_a.json", "arena_result_match_b.json", "scorecard.json"):
+    for name in ("arena_result_match_a.json", "scorecard.json"):
         path = round_dir / name
         if path.exists():
             existing_payloads.append(json.loads(path.read_text(encoding="utf-8")))
@@ -112,7 +112,6 @@ def _write_round_seed_provenance(
     seed = applied_seed if seed_control_status == "applied" else None
     for name in (
         "arena_result_match_a.json",
-        "arena_result_match_b.json",
         "scorecard.json",
         "metadata.json",
         "round_manifest.json",
@@ -613,7 +612,6 @@ def _run_execution_smoke_tournament(
             "metadata_path": str(match_dir / "metadata.json"),
             "scorecard_path": str(match_dir / "scorecard.json"),
             "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-            "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
             "status": "execution-smoke-complete",
             "winner": match_result["winner"],
             "result": match_result["result"],
@@ -647,8 +645,9 @@ def _run_execution_smoke_tournament(
                 "metadata_path": str(match_dir / "metadata.json"),
                 "scorecard_path": str(match_dir / "scorecard.json"),
                 "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-                "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
                 "pair_id": pair_id,
+                "schedule_mode": "double_round_robin",
+                "match_legs": "single",
             }
         )
 
@@ -681,7 +680,7 @@ def _run_adaptive_dryrun_tournament(
     entries = _roster_entries(roster_models)
     agent_ids = [e["agent_id"] for e in entries]
     model_by_agent = {e["agent_id"]: e for e in entries}
-    schedule = build_two_cycle_schedule(agent_ids)
+    schedule = build_double_round_robin(agent_ids)
 
     latest_post_by_agent: dict[str, Path] = {}
     for round_info in schedule["rounds"]:
@@ -811,7 +810,8 @@ def _run_adaptive_dryrun_tournament(
                 "metadata_path": str(match_dir / "metadata.json"),
                 "scorecard_path": str(match_dir / "scorecard.json"),
                 "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-                "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
+                "schedule_mode": "double_round_robin",
+                "match_legs": "single",
                 "winner": match_result["winner"],
                 "result": match_result["result"],
             }
@@ -840,7 +840,8 @@ def _run_adaptive_dryrun_tournament(
                     "metadata_path": str(match_dir / "metadata.json"),
                     "scorecard_path": str(match_dir / "scorecard.json"),
                     "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-                    "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
+                    "schedule_mode": "double_round_robin",
+                    "match_legs": "single",
                 }
             )
             latest_post_by_agent[left_agent_id] = left_post
@@ -1092,7 +1093,8 @@ def _run_openclaw_revision_smoke_tournament(
             "metadata_path": str(match_dir / "metadata.json"),
             "scorecard_path": str(sc_path),
             "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-            "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
+            "schedule_mode": "double_round_robin",
+            "match_legs": "single",
         }
         write_json(match_dir / "metadata.json", md_payload)
         write_process_feedback(match_dir, round_idx=1, match_idx=match_slot)
@@ -1118,7 +1120,8 @@ def _run_openclaw_revision_smoke_tournament(
                 "metadata_path": str(match_dir / "metadata.json"),
                 "scorecard_path": str(sc_path),
                 "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-                "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
+                "schedule_mode": "double_round_robin",
+                "match_legs": "single",
             }
         )
 
@@ -1178,7 +1181,7 @@ def _run_openclaw_adaptive_smoke_tournament(
     entries = _roster_entries(roster_models)
     agent_ids = [e["agent_id"] for e in entries]
     model_by_agent = {e["agent_id"]: e for e in entries}
-    schedule = build_two_cycle_schedule(agent_ids)
+    schedule = build_double_round_robin(agent_ids, num_rounds=num_rounds)
     rounds = schedule["rounds"][:num_rounds]
     base_seed = _execution_smoke_base_seed(tournament)
     openclaw_runner_agent_id = str(tournament.get("openclaw_runner_agent_id", "main"))
@@ -1191,7 +1194,9 @@ def _run_openclaw_adaptive_smoke_tournament(
     require_effective_initial_submission_change = bool(tournament.get("require_effective_initial_submission_change", False))
     initial_synthesis_retry_on_noop = int(tournament.get("initial_synthesis_retry_on_noop", 0) or 0)
     initial_synthesis_retry_on_route_unknown = int(tournament.get("initial_synthesis_retry_on_route_unknown", 0) or 0)
+    initial_synthesis_retry_on_timeout = int(tournament.get("initial_synthesis_retry_on_timeout", 0) or 0)
     revision_retry_on_route_unknown = int(tournament.get("revision_retry_on_route_unknown", 0) or 0)
+    revision_retry_on_timeout = int(tournament.get("revision_retry_on_timeout", 0) or 0)
     initial_synthesis_prompt_variant = str(tournament.get("initial_synthesis_prompt_variant", "anti_draw_coached"))
     revision_prompt_variant = str(tournament.get("revision_prompt_variant", "anti_draw_coached"))
     valid_prompt_variants = {"anti_draw_coached", "neutral"}
@@ -1204,6 +1209,19 @@ def _run_openclaw_adaptive_smoke_tournament(
         raise ValueError(
             f"unsupported revision_prompt_variant={revision_prompt_variant}; "
             "expected one of ['anti_draw_coached', 'neutral']"
+        )
+
+    feedback_package_variant = str(tournament.get("feedback_package_variant", "") or "").strip()
+    feedback_visibility = str(tournament.get("feedback_visibility", "own_matches_plus_public_scoreboard") or "").strip()
+    if not feedback_visibility:
+        feedback_visibility = "own_matches_plus_public_scoreboard"
+    if feedback_package_variant and feedback_package_variant != "codeclash_v3":
+        raise ValueError(
+            f"unsupported feedback_package_variant={feedback_package_variant}; expected 'codeclash_v3' or unset"
+        )
+    if feedback_package_variant == "codeclash_v3" and feedback_visibility != "own_matches_plus_public_scoreboard":
+        raise ValueError(
+            f"unsupported feedback_visibility={feedback_visibility}; expected 'own_matches_plus_public_scoreboard'"
         )
 
     latest_post_by_agent: dict[str, Path] = {}
@@ -1230,7 +1248,11 @@ def _run_openclaw_adaptive_smoke_tournament(
             initial_diff_path = Path("logs") / f"initial_synthesis_{agent_id}.diff.patch"
             copy_tree(starter_repo, initial_base)
             strategy_profile_id, strategy_profile_text = _get_initial_strategy_profile(agent_id)
-            route_retry_budget = max(initial_synthesis_retry_on_route_unknown, initial_synthesis_retry_on_noop)
+            route_retry_budget = max(
+                initial_synthesis_retry_on_route_unknown,
+                initial_synthesis_retry_on_noop,
+                initial_synthesis_retry_on_timeout,
+            )
             attempt_count = 0
             ok = False
             msg = "initial synthesis failed"
@@ -1243,6 +1265,7 @@ def _run_openclaw_adaptive_smoke_tournament(
             ignored_changed_files: list[str] = []
             disallowed_changed_files: list[str] = []
             audit_errors: list[str] = []
+            openclaw_timeout_seconds = None
             starter_hash = _sha256_file(initial_base / "submission" / "main.py")
             initial_hash = _sha256_file(initial_post / "submission" / "main.py")
             effective_initial_changed = False
@@ -1263,6 +1286,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                     provider_model=provider_model,
                     require_effective_submission_change=require_effective_initial_submission_change,
                     initial_synthesis_retry_on_noop=initial_synthesis_retry_on_noop,
+                    initial_synthesis_retry_on_timeout=initial_synthesis_retry_on_timeout,
                     strategy_profile_id=strategy_profile_id,
                     strategy_profile_text=strategy_profile_text,
                     prompt_variant=initial_synthesis_prompt_variant,
@@ -1278,6 +1302,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                 ignored_changed_files = []
                 disallowed_changed_files = []
                 audit_errors = []
+                openclaw_timeout_seconds = None
                 audit_payload: dict | None = None
                 if initial_audit_json.exists():
                     try:
@@ -1287,6 +1312,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                         ignored_changed_files = audit_payload.get("ignoredChangedFiles", []) or []
                         disallowed_changed_files = audit_payload.get("disallowedChangedFiles", []) or []
                         audit_errors = audit_payload.get("errors", []) or []
+                        openclaw_timeout_seconds = audit_payload.get("openclawTimeoutSeconds")
                     except Exception as exc:
                         audit_errors = [f"failed_to_read_revision_audit:{exc!r}"]
                 provider_route_status, actual_provider, actual_model, fallback_used = _extract_openclaw_route_provenance(
@@ -1304,9 +1330,15 @@ def _run_openclaw_adaptive_smoke_tournament(
                 effective_initial_changed = starter_hash != initial_hash
                 initial_changed_files_hash_based = ["submission/main.py"] if effective_initial_changed else []
                 initial_synthesis_ok = bool(ok) and route_provenance_verified
-                if require_effective_initial_submission_change and not effective_initial_changed:
+                if any(isinstance(err, str) and "openclaw context overflow" in err.lower() for err in audit_errors):
+                    initial_synthesis_ok = False
+                    failure_reason = "openclaw context overflow"
+                elif require_effective_initial_submission_change and not effective_initial_changed:
                     initial_synthesis_ok = False
                     failure_reason = "OpenClaw initial synthesis made no effective submission/main.py change"
+                elif any(isinstance(err, str) and "openclaw timeout" in err for err in audit_errors):
+                    initial_synthesis_ok = False
+                    failure_reason = "openclaw timeout"
                 elif not bool(ok):
                     failure_reason = msg
                 elif not route_provenance_verified and effective_initial_changed:
@@ -1317,9 +1349,18 @@ def _run_openclaw_adaptive_smoke_tournament(
                     failure_reason = None
                 if route_provenance_verified is False and fallback_used:
                     failure_reason = "OpenClaw fallback used during initial synthesis"
+                is_timeout = failure_reason == "openclaw timeout" or "timeout" in str(msg).lower()
+                is_context_overflow = (
+                    failure_reason == "openclaw context overflow"
+                    or "context overflow" in str(msg).lower()
+                )
 
                 if initial_synthesis_ok:
                     break
+                if is_timeout and attempt < initial_synthesis_retry_on_timeout:
+                    continue
+                if is_context_overflow and attempt < route_retry_budget:
+                    continue
                 if (
                     (not route_provenance_verified)
                     and attempt < route_retry_budget
@@ -1349,6 +1390,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "initial_failure_reason": failure_reason,
                 "initial_diff_path": str(initial_diff_path),
                 "initial_diff_bytes": initial_diff_path.stat().st_size if initial_diff_path.exists() else 0,
+                "initial_openclaw_timeout_seconds": openclaw_timeout_seconds,
                 "initial_ignored_changed_files": ignored_changed_files,
                 "initial_disallowed_changed_files": disallowed_changed_files,
                 "initial_changed_files_reported_by_openclaw": changed_files_reported_by_openclaw,
@@ -1491,17 +1533,6 @@ def _run_openclaw_adaptive_smoke_tournament(
                         "seed_control_status": "requested_but_not_applied",
                     },
                 )
-                write_json(
-                    match_dir / "arena_result_match_b.json",
-                    {
-                        "left_right_winner": "draw",
-                        "requested_seed": None,
-                        "applied_seed": None,
-                        "seed": None,
-                        "seed_control_status": "requested_but_not_applied",
-                    },
-                )
-
             scorecard = {"left_right_winner": "draw"}
             sc_path = match_dir / "scorecard.json"
             if sc_path.exists():
@@ -1562,7 +1593,8 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "metadata_path": str(match_dir / "metadata.json"),
                 "scorecard_path": str(sc_path),
                 "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-                "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
+                "schedule_mode": "double_round_robin",
+                "match_legs": "single",
             }
             write_json(match_dir / "metadata.json", md_payload)
             write_process_feedback(match_dir, round_idx=round_idx, match_idx=match_idx)
@@ -1588,7 +1620,8 @@ def _run_openclaw_adaptive_smoke_tournament(
                     "metadata_path": str(match_dir / "metadata.json"),
                     "scorecard_path": str(sc_path),
                     "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
-                    "arena_result_match_b_path": str(match_dir / "arena_result_match_b.json"),
+                    "schedule_mode": "double_round_robin",
+                    "match_legs": "single",
                 }
             )
 
@@ -1612,10 +1645,14 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "require_effective_submission_change": require_effective_submission_change,
                 "revision_retry_on_noop": revision_retry_on_noop,
                 "revision_retry_on_route_unknown": revision_retry_on_route_unknown,
+                "revision_retry_on_timeout": revision_retry_on_timeout,
                 "revision_prompt_variant": revision_prompt_variant,
+                "feedback_package_variant": feedback_package_variant or None,
+                "feedback_visibility": feedback_visibility or None,
                 "initial_synthesis": initial_synthesis,
                 "real_openclaw_initial_synthesis": real_openclaw_initial_synthesis,
                 "initial_synthesis_executor": initial_synthesis_executor if initial_synthesis else None,
+                "initial_synthesis_retry_on_timeout": initial_synthesis_retry_on_timeout if initial_synthesis else 0,
                 "initial_synthesis_prompt_variant": initial_synthesis_prompt_variant if initial_synthesis else None,
                 "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
                 "background_agents": ["dummy2", "dummy3"],
@@ -1629,6 +1666,45 @@ def _run_openclaw_adaptive_smoke_tournament(
             write_feedback_artifact_mirrors(mdir, tournament_name, round_idx)
 
         if round_idx in revision_rounds:
+            round_match_records_for_feedback: list[dict] = []
+            for m in round_matches:
+                try:
+                    match_idx = int(m.get("match_idx", 0) or 0)
+                except Exception:
+                    match_idx = 0
+                if match_idx <= 0:
+                    continue
+                round_match_records_for_feedback.append(
+                    {
+                        "match_id": str(m.get("match_id") or f"match_{match_idx}"),
+                        "match_idx": match_idx,
+                        "match_dir": str(round_dir / f"match_{match_idx}"),
+                        "left_agent_id": str(m.get("left_agent_id") or ""),
+                        "right_agent_id": str(m.get("right_agent_id") or ""),
+                        "requested_seed": m.get("requested_seed"),
+                        "applied_seed": m.get("applied_seed"),
+                    }
+                )
+
+            # Feedback Package v3 must exist for both participants of every match. Generate
+            # all packages for the round *before* invoking OpenClaw so partial revision
+            # failures cannot leave the tournament with incomplete feedback coverage.
+            if feedback_package_variant == "codeclash_v3" and round_match_records_for_feedback:
+                try:
+                    from runner.core.pommerman_feedback_package import stage_feedback_packages_for_round
+
+                    stage_feedback_packages_for_round(
+                        tournament_name=tournament_name,
+                        round_idx=round_idx,
+                        agent_ids=agent_ids,
+                        round_match_records=round_match_records_for_feedback,
+                        feedback_visibility=feedback_visibility or "own_matches_plus_public_scoreboard",
+                    )
+                except Exception:
+                    # Fail-open: feedback packages are audited separately and should not
+                    # block revisions in smoke runs.
+                    pass
+
             revision_manifest_for_round: dict[str, dict] = {}
             for agent_id in agent_ids:
                 meta = model_by_agent[agent_id]
@@ -1650,11 +1726,10 @@ def _run_openclaw_adaptive_smoke_tournament(
                             str(match_dir / "trajectory_summary.json"),
                             str(match_dir / "trajectory_events.json"),
                             str(match_dir / "arena_result_match_a.json"),
-                            str(match_dir / "arena_result_match_b.json"),
                             str(match_dir / f"agent_feedback_{agent_id}.md"),
                         ]
                     )
-                route_retry_budget = max(revision_retry_on_route_unknown, revision_retry_on_noop)
+                route_retry_budget = max(revision_retry_on_route_unknown, revision_retry_on_noop, revision_retry_on_timeout)
                 rev_ok = False
                 rev_msg = "openclaw revision failed"
                 requested_provider_model = provider_model
@@ -1671,6 +1746,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                 route_provenance_verified = False
                 attempt_count = 0
                 failure_reason = None
+                openclaw_timeout_seconds = None
 
                 for attempt in range(route_retry_budget + 1):
                     attempt_count = attempt + 1
@@ -1687,8 +1763,13 @@ def _run_openclaw_adaptive_smoke_tournament(
                         provider_model=provider_model,
                         require_effective_submission_change=require_effective_submission_change,
                         revision_retry_on_noop=revision_retry_on_noop,
+                        revision_retry_on_timeout=revision_retry_on_timeout,
                         feedback_artifact_paths=feedback_artifact_paths,
+                        feedback_package_variant=feedback_package_variant,
+                        feedback_visibility=feedback_visibility,
+                        round_match_records=round_match_records_for_feedback,
                         prompt_variant=revision_prompt_variant,
+                        skip_copy_tree=True,
                     )
                     write_diff_patch(codebase, post, diff_path)
                     audit_json = post / "revision_audit.json"
@@ -1700,6 +1781,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                     audit_warnings = []
                     audit_errors = []
                     changed_files_reported_by_openclaw = []
+                    openclaw_timeout_seconds = None
                     audit_payload: dict | None = None
                     if audit_json.exists():
                         try:
@@ -1708,6 +1790,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                             default_missing_placeholders = audit_payload.get("openclawDefaultMissingPlaceholders", []) or []
                             changed_files_reported_by_openclaw = audit_payload.get("changedFiles", []) or []
                             audit_errors = audit_payload.get("errors", []) or []
+                            openclaw_timeout_seconds = audit_payload.get("openclawTimeoutSeconds")
                         except Exception as exc:
                             audit_errors = [f"failed_to_read_revision_audit:{exc!r}"]
                     provider_route_status, actual_provider, actual_model, fallback_used = _extract_openclaw_route_provenance(
@@ -1728,6 +1811,28 @@ def _run_openclaw_adaptive_smoke_tournament(
                         changed_files_reported_by_openclaw=changed_files_reported_by_openclaw,
                     )
                     effective_change = bool(revision_change_fields["effective_submission_changed"])
+                    timeout_occurred = bool(
+                        any(isinstance(err, str) and "openclaw timeout" in err for err in audit_errors)
+                        or ("timeout" in str(rev_msg).lower())
+                    )
+                    if timeout_occurred:
+                        failure_reason = "openclaw timeout"
+                        if attempt < revision_retry_on_timeout:
+                            continue
+                        rev_ok = False
+                        rev_msg = failure_reason
+                        break
+                    context_overflow_occurred = bool(
+                        any(isinstance(err, str) and "openclaw context overflow" in err.lower() for err in audit_errors)
+                        or ("context overflow" in str(rev_msg).lower())
+                    )
+                    if context_overflow_occurred:
+                        failure_reason = "openclaw context overflow"
+                        if attempt < route_retry_budget:
+                            continue
+                        rev_ok = False
+                        rev_msg = failure_reason
+                        break
                     if rev_ok and effective_change and not route_provenance_verified:
                         failure_reason = "OpenClaw route provenance missing despite code change"
                         if attempt < route_retry_budget:
@@ -1772,6 +1877,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                     "actual_provider": actual_provider,
                     "actual_model": actual_model,
                     "provider_route_status": provider_route_status,
+                    "openclaw_timeout_seconds": openclaw_timeout_seconds,
                     "revision_prompt_variant": revision_prompt_variant,
                     "openclaw_default_missing_placeholders": default_missing_placeholders,
                     "audit_warnings": audit_warnings,
@@ -2030,6 +2136,12 @@ def main() -> None:
             validate_msg=validate_msg,
             smoke_only=smoke_only,
         )
+        try:
+            from runner.core.pommerman_tournament_report import write_tournament_report
+
+            write_tournament_report(tournament_name=tournament_name)
+        except Exception as exc:
+            print(f"WARN failed to write logs/tournament_report.md/json: {exc!r}")
         print(f"Created openclaw-adaptive-{rounds_for_adaptive_smoke}round-smoke manifests and propagation evidence")
         print("Smoke skeleton v6 OK.")
         return
@@ -2074,31 +2186,12 @@ def main() -> None:
                 }
             )
 
-        def round_robin_rounds(entries: list[dict]) -> list[list[tuple[dict, dict]]]:
-            if len(entries) % 2 != 0:
-                return []
-            order = list(entries)
-            rounds: list[list[tuple[dict, dict]]] = []
-            for _ in range(len(order) - 1):
-                half = len(order) // 2
-                left_half = order[:half]
-                right_half = list(reversed(order[half:]))
-                rounds.append(list(zip(left_half, right_half)))
-                order = [order[0], order[-1], *order[1:-1]]
-            return rounds
-
-        def build_double_round_robin(entries: list[dict]) -> list[list[tuple[dict, dict, int]]]:
-            single_rr = round_robin_rounds(entries)
-            first_leg = [[(left, right, 1) for (left, right) in r] for r in single_rr]
-            second_leg = [[(right, left, 2) for (left, right) in r] for r in single_rr]
-            return [*first_leg, *second_leg]
-
         def stable_pair_seed(*, tournament_index: int, pair_id: str) -> int:
             material = f"{tournament_name}|{regime['name']}|{tournament_index}|{pair_id}|{base_seed}"
-            # Deterministic 31-bit seed so both seat-swap legs in the same tournament reuse it.
             return int(hashlib.sha256(material.encode("utf-8")).hexdigest()[:8], 16) & 0x7FFFFFFF
 
-        schedule_rounds = build_double_round_robin(roster_entries)
+        schedule = build_double_round_robin([entry["id"] for entry in roster_entries], num_rounds=int(tournament["num_rounds"]))
+        schedule_rounds = schedule["rounds"]
         pairing_manifest_entries: list[dict] = []
         emit_progress(
             "schedule_built",
@@ -2134,8 +2227,8 @@ def main() -> None:
                 round_dir = ensure_round_dir(round_idx)
                 if not schedule_rounds:
                     continue
-                scheduled_pairs = schedule_rounds[(round_idx - 1) % len(schedule_rounds)]
-                round_pairs = scheduled_pairs[: tournament["matches_per_round"]]
+                round_payload = schedule_rounds[round_idx - 1]
+                round_pairs = list(round_payload.get("matches", []))
 
                 round_feedback_payload: dict | None = None
                 round_metadata_payload: dict | None = None
@@ -2155,20 +2248,22 @@ def main() -> None:
                     expected_audits=expected_audits,
                 )
 
-                for match_slot, (left_meta, right_meta, seat_swap_leg) in enumerate(round_pairs, start=1):
+                for match_slot, scheduled_match in enumerate(round_pairs, start=1):
                     match_index = (tournament_index - 1) * tournament["matches_per_round"] + match_slot
                     match_dir = round_dir / f"t{tournament_index}_match_{match_slot}"
                     match_dir.mkdir(parents=True, exist_ok=True)
 
-                    left_id = left_meta["id"]
-                    right_id = right_meta["id"]
+                    left_id = str(scheduled_match["left_agent"])
+                    right_id = str(scheduled_match["right_agent"])
+                    left_meta = next(x for x in roster_entries if x["id"] == left_id)
+                    right_meta = next(x for x in roster_entries if x["id"] == right_id)
                     left_agent_id = left_meta.get("agent_id")
                     right_agent_id = right_meta.get("agent_id")
                     left_provider_model = left_meta.get("provider_model")
                     right_provider_model = right_meta.get("provider_model")
                     left_executor = left_meta.get("executor")
                     right_executor = right_meta.get("executor")
-                    pair_id = "__vs__".join(sorted([left_id, right_id]))
+                    pair_id = str(scheduled_match["pair_id"])
                     pair_seed = stable_pair_seed(tournament_index=tournament_index, pair_id=pair_id)
                     emit_progress(
                         "match_start",
@@ -2188,7 +2283,7 @@ def main() -> None:
                         right_agent_id=right_agent_id,
                         left_provider_model=left_provider_model,
                         right_provider_model=right_provider_model,
-                        seat_swap_leg=seat_swap_leg,
+                        encounter_index=scheduled_match.get("encounter_index"),
                         seed=pair_seed,
                         completed_matches=completed_matches,
                         total_matches=total_matches,
@@ -2208,9 +2303,11 @@ def main() -> None:
                             "right_agent_id": right_agent_id,
                             "left_provider_model": left_provider_model,
                             "right_provider_model": right_provider_model,
-                            "seat_swap_leg": seat_swap_leg,
-                            "swapped_with_round": None,
-                            "swapped_with_match_index": None,
+                            "schedule_mode": "double_round_robin",
+                            "match_legs": "single",
+                            "encounter_index": scheduled_match.get("encounter_index"),
+                            "reverse_of_round": scheduled_match.get("reverse_of_round"),
+                            "reverse_of_match": scheduled_match.get("reverse_of_match"),
                             "seed": pair_seed,
                         }
                     )
@@ -2235,7 +2332,7 @@ def main() -> None:
                             right_agent_id=right_agent_id,
                             left_provider_model=left_provider_model,
                             right_provider_model=right_provider_model,
-                            seat_swap_leg=seat_swap_leg,
+                            encounter_index=scheduled_match.get("encounter_index"),
                             seed=pair_seed,
                             completed_matches=completed_matches,
                             total_matches=total_matches,
@@ -2309,7 +2406,7 @@ def main() -> None:
                             right_agent_id=right_agent_id,
                             left_provider_model=left_provider_model,
                             right_provider_model=right_provider_model,
-                            seat_swap_leg=seat_swap_leg,
+                            encounter_index=scheduled_match.get("encounter_index"),
                             seed=pair_seed,
                             completed_matches=completed_matches,
                             total_matches=total_matches,
@@ -2340,7 +2437,7 @@ def main() -> None:
                             right_agent_id=right_agent_id,
                             left_provider_model=left_provider_model,
                             right_provider_model=right_provider_model,
-                            seat_swap_leg=seat_swap_leg,
+                            encounter_index=scheduled_match.get("encounter_index"),
                             seed=pair_seed,
                             completed_matches=completed_matches,
                             total_matches=total_matches,
@@ -2384,7 +2481,6 @@ def main() -> None:
                         right_agent_id=right_agent_id,
                         left_provider_model=left_provider_model,
                         right_provider_model=right_provider_model,
-                        seat_swap_leg=seat_swap_leg,
                         seed=pair_seed,
                         completed_matches=completed_matches,
                         total_matches=total_matches,
@@ -2423,7 +2519,6 @@ def main() -> None:
                         right_agent_id=right_agent_id,
                         left_provider_model=left_provider_model,
                         right_provider_model=right_provider_model,
-                        seat_swap_leg=seat_swap_leg,
                         seed=pair_seed,
                         completed_matches=completed_matches,
                         total_matches=total_matches,
@@ -2448,7 +2543,6 @@ def main() -> None:
                         right_agent_id=right_agent_id,
                         left_provider_model=left_provider_model,
                         right_provider_model=right_provider_model,
-                        seat_swap_leg=seat_swap_leg,
                         seed=pair_seed,
                         completed_matches=completed_matches,
                         total_matches=total_matches,
@@ -2487,7 +2581,6 @@ def main() -> None:
                         right_agent_id=right_agent_id,
                         left_provider_model=left_provider_model,
                         right_provider_model=right_provider_model,
-                        seat_swap_leg=seat_swap_leg,
                         seed=pair_seed,
                         completed_matches=completed_matches,
                         total_matches=total_matches,
@@ -2530,7 +2623,9 @@ def main() -> None:
                             "right_provider_model": right_provider_model,
                             "right_executor": right_executor,
                             "pair_id": pair_id,
-                            "seat_swap_leg": seat_swap_leg,
+                            "schedule_mode": "double_round_robin",
+                            "match_legs": "single",
+                            "encounter_index": scheduled_match.get("encounter_index"),
                             "seed": pair_seed,
                             "smoke_only": smoke_only,
                         },
@@ -2582,7 +2677,9 @@ def main() -> None:
                         "right_provider_model": right_provider_model,
                         "right_executor": right_executor,
                         "pair_id": pair_id,
-                        "seat_swap_leg": seat_swap_leg,
+                        "schedule_mode": "double_round_robin",
+                        "match_legs": "single",
+                        "encounter_index": scheduled_match.get("encounter_index"),
                         "seed": pair_seed,
                         "smoke_only": smoke_only,
                         "starter_repo": str(starter_repo),
@@ -2628,7 +2725,7 @@ def main() -> None:
                         right_agent_id=right_agent_id,
                         left_provider_model=left_provider_model,
                         right_provider_model=right_provider_model,
-                        seat_swap_leg=seat_swap_leg,
+                        encounter_index=scheduled_match.get("encounter_index"),
                         seed=pair_seed,
                         completed_matches=completed_matches,
                         total_matches=total_matches,
@@ -2675,19 +2772,6 @@ def main() -> None:
                 completed_audits=completed_audits,
                 expected_audits=expected_audits,
             )
-
-        # Backfill swapped leg pointers by pair_id and seat_swap_leg.
-        index_by_pair_leg: dict[tuple[int, str, int], int] = {}
-        for idx, entry in enumerate(pairing_manifest_entries):
-            index_by_pair_leg[(entry["tournament_index"], entry["pair_id"], entry["seat_swap_leg"])] = idx
-        for entry in pairing_manifest_entries:
-            other_leg = 2 if entry["seat_swap_leg"] == 1 else 1
-            other_idx = index_by_pair_leg.get((entry["tournament_index"], entry["pair_id"], other_leg))
-            if other_idx is None:
-                continue
-            other = pairing_manifest_entries[other_idx]
-            entry["swapped_with_round"] = other["round"]
-            entry["swapped_with_match_index"] = other["match_index"]
 
         pairing_manifest_payload = {
             "tournament_name": tournament_name,

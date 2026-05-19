@@ -45,7 +45,6 @@ def audit_seed_control(logs_root: Path = Path("logs")) -> tuple[list[str], list[
             for name in [
                 "scorecard.json",
                 "arena_result_match_a.json",
-                "arena_result_match_b.json",
                 "trajectory_summary.json",
                 "trajectory_events.json",
             ]:
@@ -121,20 +120,6 @@ def audit_seed_control(logs_root: Path = Path("logs")) -> tuple[list[str], list[
                         errors.append(f"{md}: seed_control_error must be non-empty when requested but not applied")
             else:
                 errors.append(f"{md}: unsupported seed_control_status={status!r}")
-
-            if md.name.startswith("match_") and rd.name.startswith("round_"):
-                # For seat-swap pairs in this project, requested seeds should be stable across the pair's legs,
-                # which is represented by the two arena result legs within the same match directory.
-                a = _load_json(md / "arena_result_match_a.json") if (md / "arena_result_match_a.json").exists() else {}
-                b = _load_json(md / "arena_result_match_b.json") if (md / "arena_result_match_b.json").exists() else {}
-                if a.get("requested_seed") != b.get("requested_seed"):
-                    errors.append(f"{md}: match_a/match_b requested_seed mismatch")
-                if status == "applied" and a.get("applied_seed") != b.get("applied_seed"):
-                    errors.append(f"{md}: match_a/match_b applied_seed mismatch")
-                if a.get("seed_control_status") != b.get("seed_control_status"):
-                    errors.append(f"{md}: match_a/match_b seed_control_status mismatch")
-                if a.get("seed_control_method_applied") != b.get("seed_control_method_applied") and a.get("seed_control_status") == b.get("seed_control_status") == "applied":
-                    warnings.append(f"{md}: match_a/match_b applied via different methods")
 
     return errors, warnings
 

@@ -14,6 +14,7 @@ require_all_agents_initial_synthesized: true
 require_effective_initial_submission_change: true
 initial_synthesis_retry_on_noop: 1
 initial_synthesis_retry_on_route_unknown: 1
+initial_synthesis_retry_on_timeout: 1
 initial_synthesis_prompt_variant: neutral
 
 openclaw_adaptive_smoke: true
@@ -26,7 +27,10 @@ require_all_agents_revised: true
 require_effective_submission_change: true
 revision_retry_on_noop: 1
 revision_retry_on_route_unknown: 1
+revision_retry_on_timeout: 1
 revision_prompt_variant: neutral
+feedback_package_variant: codeclash_v3
+feedback_visibility: own_matches_plus_public_scoreboard
 openclaw_runner_agent_id: main
 
 scorecard_policy: raw_per_match_scorecard; pair-level aggregation is post-analysis

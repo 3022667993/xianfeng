@@ -45,10 +45,21 @@ def probe_runtime_route(provider_model: str) -> dict:
         game="pommerman_1v1",
         regime="A00",
     )
+    session_id = "runtime-eval-probe-" + __import__("hashlib").sha256(
+        f"{provider_model}:{__import__('time').time_ns()}".encode("utf-8")
+    ).hexdigest()[:24]
+    isolated_state_dir = probe_root / "openclaw_home"
+    session_config_path, isolation_warnings = ocm._seed_isolated_openclaw_state(
+        isolated_state_dir=isolated_state_dir,
+        agent_id="main",
+    )
     response, stdout, stderr, return_code = ocm._run_openclaw_agent(
         message,
         agent_id="main",
         provider_model=provider_model,
+        session_id=session_id,
+        session_state_dir=isolated_state_dir,
+        session_config_path=session_config_path,
     )
     parseable_json = response is not None
     audit = ocm._audit_openclaw_response(response, minimal_workspace=Path("/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal"))
@@ -65,6 +76,10 @@ def probe_runtime_route(provider_model: str) -> dict:
         "actual_provider": actual_provider,
         "actual_model": actual_model,
         "provider_route_status": provider_route_status,
+        "openclaw_session_isolated": True,
+        "openclaw_session_state_dir": str(isolated_state_dir),
+        "openclaw_session_id": session_id,
+        "openclaw_isolation_warnings": isolation_warnings,
         "openclaw_return_code": return_code,
         "parseable_json": parseable_json,
         "errors": errors,

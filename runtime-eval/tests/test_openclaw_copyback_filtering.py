@@ -44,7 +44,18 @@ def _mutate_from_message(message: str, mutator) -> None:
 def _run_main_with_mutation(tmp_path: Path, monkeypatch, mutator):
     codebase_post_dir, feedback_path = _mk_base(tmp_path)
 
-    def fake_run_openclaw_agent(message: str, *, agent_id: str, provider_model: str | None = None):
+    def fake_run_openclaw_agent(
+        message: str,
+        *,
+        agent_id: str,
+        provider_model: str | None = None,
+        session_id: str | None = None,
+        session_state_dir: Path | None = None,
+        session_config_path: Path | None = None,
+    ):
+        _ = session_id
+        _ = session_state_dir
+        _ = session_config_path
         _mutate_from_message(message, mutator)
         return _mk_response(), "", "", 0
 

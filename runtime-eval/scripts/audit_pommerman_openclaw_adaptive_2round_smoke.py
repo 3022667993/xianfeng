@@ -69,7 +69,7 @@ def _audit_round_manifest(path: Path, *, expected_round_idx: int) -> tuple[list[
         seen_agents.extend([left, right])
         if m.get("background_agents") != ["dummy2", "dummy3"]:
             errors.append(f"round_{expected_round_idx}: background agents mismatch")
-        for f in ["metadata_path", "scorecard_path", "arena_result_match_a_path", "arena_result_match_b_path"]:
+        for f in ["metadata_path", "scorecard_path", "arena_result_match_a_path"]:
             p = m.get(f)
             if not isinstance(p, str) or not Path(p).exists():
                 errors.append(f"round_{expected_round_idx}: missing artifact {f}")

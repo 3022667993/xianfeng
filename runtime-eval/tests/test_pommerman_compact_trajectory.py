@@ -30,12 +30,6 @@ def _mk_match(tmp_path: Path) -> Path:
         "event_flags": {"terminal": False, "alive_changed": False, "reward_changed": False},
     }
     (md / "trajectory_compact_match_a.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
-    row_b = dict(row)
-    row_b["leg_label"] = "match_b"
-    row_b["event_flags"] = {"terminal": True, "alive_changed": True, "reward_changed": True}
-    row_b["step"] = 9
-    row_b["reward"] = [1, -1, -1, -1]
-    (md / "trajectory_compact_match_b.jsonl").write_text(json.dumps(row_b) + "\n", encoding="utf-8")
     events = {
         "schema_version": "pommerman_compact_trajectory_events_v2",
         "legs": {
@@ -48,17 +42,6 @@ def _mk_match(tmp_path: Path) -> Path:
                 "first_reward_change_step": None,
                 "alive_change_steps": [],
                 "final_reward": [0, 0, 0, 0],
-                "capture_notes": [],
-            },
-            "match_b": {
-                "trajectory_path": str(md / "trajectory_compact_match_b.jsonl"),
-                "capture_status": "captured",
-                "step_count": 1,
-                "terminal_step": 9,
-                "winner_seats": [0],
-                "first_reward_change_step": 9,
-                "alive_change_steps": [9],
-                "final_reward": [1, -1, -1, -1],
                 "capture_notes": [],
             },
         },

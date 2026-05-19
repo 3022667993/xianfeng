@@ -31,7 +31,7 @@ def test_openclaw_revision_smoke_round_is_1x3_perfect_matching():
 def _mk_match(round_dir: Path, idx: int, left: str, right: str):
     md = round_dir / f"match_{idx}"
     md.mkdir(parents=True, exist_ok=True)
-    for name in ["metadata.json", "scorecard.json", "arena_result_match_a.json", "arena_result_match_b.json"]:
+    for name in ["metadata.json", "scorecard.json", "arena_result_match_a.json"]:
         (md / name).write_text("{}", encoding="utf-8")
     return {
         "match_id": f"match_{idx}",
@@ -50,7 +50,6 @@ def _mk_match(round_dir: Path, idx: int, left: str, right: str):
         "metadata_path": str(md / "metadata.json"),
         "scorecard_path": str(md / "scorecard.json"),
         "arena_result_match_a_path": str(md / "arena_result_match_a.json"),
-        "arena_result_match_b_path": str(md / "arena_result_match_b.json"),
     }
 
 

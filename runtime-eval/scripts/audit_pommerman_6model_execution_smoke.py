@@ -70,7 +70,6 @@ def audit_execution_smoke(tournament_name: str) -> tuple[list[str], list[str]]:
             "metadata_path",
             "scorecard_path",
             "arena_result_match_a_path",
-            "arena_result_match_b_path",
         ]:
             p = m.get(field)
             if not isinstance(p, str) or not Path(p).exists():

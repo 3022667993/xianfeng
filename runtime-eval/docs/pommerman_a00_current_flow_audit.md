@@ -44,11 +44,9 @@
   - `metadata.json`
   - `scorecard.json`
   - `arena_result_match_a.json`
-  - `arena_result_match_b.json`
   - `trajectory_summary.json`
   - `trajectory_events.json`
   - `trajectory_compact_match_a.jsonl`
-  - `trajectory_compact_match_b.jsonl`
   - `agent_feedback_<agent_id>.json`
   - `agent_feedback_<agent_id>.md`
   - `build.log`
@@ -56,7 +54,8 @@
   - `stderr.log`
 
 ### C. Feedback Phase
-- Process feedback v1.
+- Schedule semantics are `double_round_robin` with `match_legs=single`; `match_b` artifacts are no longer required.
+- Process feedback v2.
 - Compact trajectory v2.
 - Seed provenance is recorded.
 - Anti-draw diagnostics:

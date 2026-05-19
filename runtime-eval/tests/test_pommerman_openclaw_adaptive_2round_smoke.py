@@ -27,7 +27,7 @@ def _mk_round_manifest(tmp_path: Path, round_idx: int, tournament: str):
     for i, (l, r) in enumerate(pairs, start=1):
         md = rd / f"match_{i}"
         md.mkdir(parents=True, exist_ok=True)
-        for n in ["metadata.json", "scorecard.json", "arena_result_match_a.json", "arena_result_match_b.json"]:
+        for n in ["metadata.json", "scorecard.json", "arena_result_match_a.json"]:
             (md / n).write_text("{}", encoding="utf-8")
         matches.append(
             {
@@ -47,7 +47,6 @@ def _mk_round_manifest(tmp_path: Path, round_idx: int, tournament: str):
                 "metadata_path": str(md / "metadata.json"),
                 "scorecard_path": str(md / "scorecard.json"),
                 "arena_result_match_a_path": str(md / "arena_result_match_a.json"),
-                "arena_result_match_b_path": str(md / "arena_result_match_b.json"),
             }
         )
     (rd / "round_manifest.json").write_text(
@@ -240,11 +239,13 @@ def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
                 encoding="utf-8",
             )
             summary = {
-                "schema_version": "pommerman_process_feedback_v1",
+                "schema_version": "pommerman_process_feedback_v2",
                 "round_idx": int(rd.name.split("_")[-1]),
                 "match_idx": int(match_dir.name.split("_")[-1]),
                 "match_id": match_dir.name,
                 "pair_id": f"{left_id}__vs__{right_id}",
+                "schedule_mode": "double_round_robin",
+                "match_legs": "single",
                 "left_agent_id": left_id,
                 "right_agent_id": right_id,
                 "background_agents": ["dummy2", "dummy3"],
@@ -254,7 +255,15 @@ def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
                 "applied_seed": None,
                 "seed_control_status": "requested_but_not_applied",
                 "legs": [],
-                "seat_swap_summary": {},
+                "seat_swap_summary": {
+                    "same_requested_seed": True,
+                    "match_a_left_right_winner": "draw",
+                    "match_b_left_right_winner": None,
+                    "outcome_changed_under_swap": None,
+                    "dummy_win_any_leg": False,
+                    "tested_agent_win_any_leg": False,
+                    "both_tested_agents_lost_any_leg": False,
+                },
                 "agent_summaries": {},
             }
             (match_dir / "trajectory_summary.json").write_text(json.dumps(summary), encoding="utf-8")
@@ -263,17 +272,6 @@ def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
                 "legs": {
                     "match_a": {
                         "trajectory_path": str(match_dir / "trajectory_compact_match_a.jsonl"),
-                        "capture_status": "captured",
-                        "step_count": 1,
-                        "terminal_step": None,
-                        "winner_seats": None,
-                        "first_reward_change_step": None,
-                        "alive_change_steps": [],
-                        "final_reward": [0, 0, 0, 0],
-                        "capture_notes": [],
-                    },
-                    "match_b": {
-                        "trajectory_path": str(match_dir / "trajectory_compact_match_b.jsonl"),
                         "capture_status": "captured",
                         "step_count": 1,
                         "terminal_step": None,
@@ -294,13 +292,17 @@ def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
             (match_dir / "trajectory_events.json").write_text(json.dumps(compact_events), encoding="utf-8")
             for agent in [left_id, right_id]:
                 payload = {
-                    "schema_version": "pommerman_agent_feedback_v1",
+                    "schema_version": "pommerman_agent_feedback_v2",
+                    "round_idx": int(rd.name.split("_")[-1]),
+                    "match_idx": int(match_dir.name.split("_")[-1]),
+                    "match_id": match_dir.name,
                     "agent_id": agent,
+                    "opponent_agent_id": right_id if agent == left_id else left_id,
+                    "background_agents": ["dummy2", "dummy3"],
                     "source_files": {
                         "metadata": str(match_dir / "metadata.json"),
                         "scorecard": str(match_dir / "scorecard.json"),
                         "arena_result_match_a": str(match_dir / "arena_result_match_a.json"),
-                        "arena_result_match_b": str(match_dir / "arena_result_match_b.json"),
                         "trajectory_summary": str(match_dir / "trajectory_summary.json"),
                     },
                     "result_summary": {"wins": 0, "losses": 0, "draws": 0, "legs": []},
@@ -320,13 +322,13 @@ def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
                     "compact_trajectory_v2": {
                         "events_path": str(match_dir / "trajectory_events.json"),
                         "match_a": compact_events["legs"]["match_a"],
-                        "match_b": compact_events["legs"]["match_b"],
                         "limitations": compact_events["limitations"],
                     },
                     "limitations": [
-                        "process_feedback_v1 is derived from result-level arena artifacts and compact trajectory v2 when available",
+                        "process_feedback_v2 is derived from result-level arena artifacts and compact trajectory v2 when available",
                         "compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
                         "full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
+                        "seat-swap instability is not applicable in single-leg mode",
                     ],
                 }
                 (match_dir / f"agent_feedback_{agent}.json").write_text(json.dumps(payload), encoding="utf-8")
@@ -337,12 +339,13 @@ def test_process_feedback_fixture_passes(tmp_path, monkeypatch):
                             "## Compact Trajectory v2",
                             "- compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
                             "## Limitations",
-                            "- process_feedback_v1 is derived from result-level arena artifacts and compact trajectory v2 when available",
-                            "- compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
-                            "- full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
-                        ]
-                    ),
-                    encoding="utf-8",
+                                "- process_feedback_v2 is derived from result-level arena artifacts and compact trajectory v2 when available",
+                                "- compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
+                                "- full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
+                                "- seat-swap instability is not applicable in single-leg mode",
+                            ]
+                        ),
+                        encoding="utf-8",
                 )
     errors, _warnings = audit_process_feedback()
     assert errors == []

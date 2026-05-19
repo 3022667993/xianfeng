@@ -77,7 +77,7 @@ def audit_adaptive_dryrun(tournament_name: str) -> tuple[list[str], list[str]]:
             pair_id = m.get("pair_id")
             if m.get("background_agents") != ["dummy2", "dummy3"]:
                 errors.append(f"round_{round_idx}:{pair_id} background mismatch")
-            for f in ["metadata_path", "scorecard_path", "arena_result_match_a_path", "arena_result_match_b_path"]:
+            for f in ["metadata_path", "scorecard_path", "arena_result_match_a_path"]:
                 p = m.get(f)
                 if not isinstance(p, str) or not Path(p).exists():
                     errors.append(f"round_{round_idx}:{pair_id} missing {f}")

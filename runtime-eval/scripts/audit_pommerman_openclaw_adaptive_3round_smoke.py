@@ -89,7 +89,7 @@ def _audit_round_manifest(path: Path, expected_round_idx: int) -> tuple[list[str
             errors.append(f"round_{expected_round_idx}: background agents mismatch")
         if m.get("pair_id") is None:
             errors.append(f"round_{expected_round_idx}: pair_id missing")
-        for f in ["metadata_path", "scorecard_path", "arena_result_match_a_path", "arena_result_match_b_path"]:
+        for f in ["metadata_path", "scorecard_path", "arena_result_match_a_path"]:
             p = m.get(f)
             if not isinstance(p, str) or not Path(p).exists():
                 errors.append(f"round_{expected_round_idx}: missing artifact {f}")
@@ -179,11 +179,13 @@ def _audit_propagation_manifest(
             errors.append(f"{path}: {agent_id} source_round mismatch")
         if rec.get("target_round") != target_round:
             errors.append(f"{path}: {agent_id} target_round mismatch")
+        source_post_path = Path(str(rec.get("source_post_path")))
+        target_play_path = Path(str(rec.get("target_play_path")))
         expected_source = Path("workspace/posts") / tournament_name / agent_id / f"codebase_post_{source_round}"
         expected_target = Path("workspace/codebases") / tournament_name / agent_id / f"codebase_play_{target_round}"
-        if Path(str(rec.get("source_post_path"))) != expected_source:
+        if source_post_path != expected_source:
             errors.append(f"{path}: {agent_id} source_post_path mismatch")
-        if Path(str(rec.get("target_play_path"))) != expected_target:
+        if target_play_path != expected_target:
             errors.append(f"{path}: {agent_id} target_play_path mismatch")
         source_submission_sha256 = rec.get("source_submission_sha256")
         target_submission_sha256 = rec.get("target_submission_sha256")
@@ -191,17 +193,21 @@ def _audit_propagation_manifest(
             errors.append(f"{path}: {agent_id} source/target submission sha256 required")
         if rec.get("propagation_matches_post") is not True:
             errors.append(f"{path}: {agent_id} propagation_matches_post must be true")
-        if not expected_source.exists():
-            errors.append(f"{path}: {agent_id} source_post_path missing")
-        if not expected_target.exists():
-            errors.append(f"{path}: {agent_id} target_play_path missing")
-        expected_source_hash = _sha256_file(expected_source / "submission" / "main.py")
-        expected_target_hash = _sha256_file(expected_target / "submission" / "main.py")
-        if source_submission_sha256 != expected_source_hash:
+        source_submission_path = source_post_path / "submission" / "main.py"
+        target_submission_path = target_play_path / "submission" / "main.py"
+        if not source_submission_path.exists():
+            errors.append(f"{path}: {agent_id} source submission missing: {source_submission_path}")
+        if not target_submission_path.exists():
+            errors.append(f"{path}: {agent_id} target submission missing: {target_submission_path}")
+        actual_source_hash = _sha256_file(source_submission_path)
+        actual_target_hash = _sha256_file(target_submission_path)
+        if source_submission_sha256 != actual_source_hash:
             errors.append(f"{path}: {agent_id} source_submission_sha256 mismatch")
-        if target_submission_sha256 != expected_target_hash:
+        if target_submission_sha256 != actual_target_hash:
             errors.append(f"{path}: {agent_id} target_submission_sha256 mismatch")
-        if expected_source_hash != expected_target_hash:
+        if source_submission_sha256 != target_submission_sha256:
+            errors.append(f"{path}: {agent_id} source/target submission sha256 differ")
+        if actual_source_hash != actual_target_hash:
             errors.append(f"{path}: {agent_id} propagated submission/main.py hash mismatch")
     return errors
 
@@ -228,10 +234,8 @@ def audit_openclaw_adaptive_3round_smoke(
                 "metadata.json",
                 "scorecard.json",
                 "arena_result_match_a.json",
-                "arena_result_match_b.json",
                 "trajectory_summary.json",
                 "trajectory_compact_match_a.jsonl",
-                "trajectory_compact_match_b.jsonl",
                 "trajectory_events.json",
             ]:
                 if not (match_dir / req).exists():
@@ -249,7 +253,6 @@ def audit_openclaw_adaptive_3round_smoke(
                 "metadata.json",
                 "scorecard.json",
                 "arena_result_match_a.json",
-                "arena_result_match_b.json",
                 "trajectory_summary.json",
                 "trajectory_events.json",
             ]:

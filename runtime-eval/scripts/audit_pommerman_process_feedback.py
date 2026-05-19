@@ -42,7 +42,7 @@ def audit_process_feedback(logs_root: Path = Path("logs")) -> tuple[list[str], l
                 errors.append(f"{match_dir}: missing trajectory_summary.json")
                 continue
             ts = _load_json(ts_path)
-            if ts.get("schema_version") != "pommerman_process_feedback_v1":
+            if ts.get("schema_version") != "pommerman_process_feedback_v2":
                 errors.append(f"{match_dir}: trajectory summary schema_version mismatch")
 
             expected_agents = {left, right}
@@ -59,13 +59,13 @@ def audit_process_feedback(logs_root: Path = Path("logs")) -> tuple[list[str], l
 
             for jf in json_files:
                 payload = _load_json(jf)
-                if payload.get("schema_version") != "pommerman_agent_feedback_v1":
+                if payload.get("schema_version") != "pommerman_agent_feedback_v2":
                     errors.append(f"{jf}: schema_version mismatch")
                 agent_id = payload.get("agent_id")
                 if agent_id not in expected_agents:
                     errors.append(f"{jf}: agent_id must be one of tested agents")
                 src = payload.get("source_files", {})
-                for k in ["metadata", "scorecard", "arena_result_match_a", "arena_result_match_b", "trajectory_summary"]:
+                for k in ["metadata", "scorecard", "arena_result_match_a", "trajectory_summary"]:
                     p = src.get(k)
                     if not isinstance(p, str) or not Path(p).exists():
                         errors.append(f"{jf}: source file missing for {k}")
@@ -74,13 +74,15 @@ def audit_process_feedback(logs_root: Path = Path("logs")) -> tuple[list[str], l
                 compact = payload.get("compact_trajectory_v2")
                 compact_present = isinstance(compact, dict)
                 mode_a_required = [
-                    "process_feedback_v1 is derived from result-level arena artifacts only",
+                    "process_feedback_v2 is derived from result-level arena artifacts only",
                     "tick-level actions, board states, bomb events, and death causes are not yet recorded",
+                    "seat-swap instability is not applicable in single-leg mode",
                 ]
                 mode_b_required = [
-                    "process_feedback_v1 is derived from result-level arena artifacts and compact trajectory v2 when available",
+                    "process_feedback_v2 is derived from result-level arena artifacts and compact trajectory v2 when available",
                     "compact trajectory v2 records lightweight per-step actions/rewards/alive/positions/counts when available",
                     "full board states, full observations, death causes, bomb ownership, and power-up pickup causes are not yet recorded",
+                    "seat-swap instability is not applicable in single-leg mode",
                 ]
                 if compact_present:
                     for req in mode_b_required:

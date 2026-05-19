@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from runner.core.config import load_yaml
-from runner.core.schedule import build_two_cycle_schedule
+from runner.core.schedule import build_double_round_robin
 from scripts.audit_pommerman_10round_adaptive_dryrun import audit_adaptive_dryrun
 
 
@@ -14,9 +14,11 @@ def test_adaptive_dryrun_config_loads():
 
 
 def test_generated_6agent_schedule_has_30_matches_and_swapped_cycles():
-    s = build_two_cycle_schedule([f"a{i}" for i in range(1, 7)])
+    s = build_double_round_robin([f"a{i}" for i in range(1, 7)])
     assert s["total_matches"] == 30
-    assert s["cycle_1_pair_order"] == s["cycle_2_pair_order"]
+    assert s["schedule_mode"] == "double_round_robin"
+    assert s["match_legs"] == "single"
+    assert s["pair_order_by_cycle"][1] == s["pair_order_by_cycle"][2]
     for r in s["rounds"]:
         seen = []
         for m in r["matches"]:
@@ -36,7 +38,6 @@ def _mk_match(round_dir: Path, idx: int, left: str, right: str, pair_id: str, re
     (md / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
     (md / "scorecard.json").write_text("{}", encoding="utf-8")
     (md / "arena_result_match_a.json").write_text("{}", encoding="utf-8")
-    (md / "arena_result_match_b.json").write_text("{}", encoding="utf-8")
     return {
         "match_id": f"match_{idx}",
         "match_idx": idx,
@@ -54,7 +55,6 @@ def _mk_match(round_dir: Path, idx: int, left: str, right: str, pair_id: str, re
         "metadata_path": str(md / "metadata.json"),
         "scorecard_path": str(md / "scorecard.json"),
         "arena_result_match_a_path": str(md / "arena_result_match_a.json"),
-        "arena_result_match_b_path": str(md / "arena_result_match_b.json"),
     }
 
 

@@ -1,9 +1,9 @@
-name: pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke
+name: pommerman_gptv16_a00_openclaw_initial_synthesis_10round_neutral_double_rr
 game: pommerman_1v1
 regime: A00
 
 num_models: 6
-num_rounds: 3
+num_rounds: 10
 matches_per_round: 3
 independent_tournaments: 1
 
@@ -15,20 +15,24 @@ require_effective_initial_submission_change: true
 initial_synthesis_retry_on_noop: 1
 initial_synthesis_retry_on_route_unknown: 1
 initial_synthesis_retry_on_timeout: 1
-initial_synthesis_prompt_variant: anti_draw_coached
 
 openclaw_adaptive_smoke: true
 real_openclaw_revision: true
 low_budget_revision: true
 revision_executor: openclaw-minimal
-revision_rounds: [1, 2]
+revision_rounds: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 revision_subset_size: 6
 require_all_agents_revised: true
 require_effective_submission_change: true
 revision_retry_on_noop: 1
 revision_retry_on_route_unknown: 1
 revision_retry_on_timeout: 1
-revision_prompt_variant: anti_draw_coached
-openclaw_runner_agent_id: main
+
+initial_synthesis_prompt_variant: neutral
+revision_prompt_variant: neutral
+feedback_package_variant: codeclash_v3
+feedback_visibility: own_matches_plus_public_scoreboard
+schedule_mode: double_round_robin
+match_legs: single
 
 scorecard_policy: raw_per_match_scorecard; pair-level aggregation is post-analysis

@@ -76,6 +76,8 @@ python -m runner.main \
   --models configs/models/openclaw_relay_6model_deepseek_glm.yaml
 python scripts/audit_pommerman_initial_synthesis.py
 python scripts/audit_pommerman_initial_synthesis_3round_smoke.py
+python scripts/audit_pommerman_initial_synthesis_3round_smoke.py \
+  --tournament configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_smoke.yaml
 
 # Neutral prompt variant (formal-style objective/constraints)
 python -m runner.main \
@@ -132,7 +134,6 @@ sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
   - `metadata.json`
   - `scorecard.json`
   - `arena_result_match_a.json`
-  - `arena_result_match_b.json`
   - `build.log`
   - `test.log`
   - `stderr.log`
@@ -140,10 +141,10 @@ sed -n '1,220p' logs/round_1/match_1/agent_feedback_<agent_id>.md
   - `agent_feedback_<agent_id>.json`
   - `agent_feedback_<agent_id>.md`
   - `trajectory_compact_match_a.jsonl`
-  - `trajectory_compact_match_b.jsonl`
   - `trajectory_events.json`
   - `notes/revision_log.md` and `revision_audit.json` from prior revisions when present
-- `process feedback v1` is a factual summary layer.
+- Current formal Pommerman scheduling uses `double_round_robin` with `match_legs=single`; `match_b` artifacts are not required.
+- `process feedback v2` is a factual summary layer.
 - compact trajectory v2 has run.
 - compact trajectory v2 is lightweight per-step process feedback, not full replay.
 - full board/observation replay remains future work.

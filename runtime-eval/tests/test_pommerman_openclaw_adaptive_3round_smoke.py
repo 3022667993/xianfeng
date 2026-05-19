@@ -46,11 +46,12 @@ def _mk_round_manifest(tmp_path: Path, round_idx: int, tournament: str):
         (md / "metadata.json").write_text(json.dumps({"left_agent_id": l, "right_agent_id": r, **common}), encoding="utf-8")
         (md / "scorecard.json").write_text(json.dumps(common), encoding="utf-8")
         (md / "arena_result_match_a.json").write_text(json.dumps(common), encoding="utf-8")
-        (md / "arena_result_match_b.json").write_text(json.dumps(common), encoding="utf-8")
         (md / "trajectory_summary.json").write_text(
             json.dumps(
                 {
-                    "schema_version": "pommerman_process_feedback_v1",
+                    "schema_version": "pommerman_process_feedback_v2",
+                    "schedule_mode": "double_round_robin",
+                    "match_legs": "single",
                     "left_agent_id": l,
                     "right_agent_id": r,
                     **common,
@@ -63,10 +64,9 @@ def _mk_round_manifest(tmp_path: Path, round_idx: int, tournament: str):
             encoding="utf-8",
         )
         (md / "trajectory_compact_match_a.jsonl").write_text("{}", encoding="utf-8")
-        (md / "trajectory_compact_match_b.jsonl").write_text("{}", encoding="utf-8")
         for aid in [l, r]:
             (md / f"agent_feedback_{aid}.json").write_text(
-                json.dumps({"schema_version": "pommerman_agent_feedback_v1", "agent_id": aid}),
+                json.dumps({"schema_version": "pommerman_agent_feedback_v2", "agent_id": aid}),
                 encoding="utf-8",
             )
             (md / f"agent_feedback_{aid}.md").write_text("# feedback\n", encoding="utf-8")
@@ -85,7 +85,6 @@ def _mk_round_manifest(tmp_path: Path, round_idx: int, tournament: str):
                 "metadata_path": str(md / "metadata.json"),
                 "scorecard_path": str(md / "scorecard.json"),
                 "arena_result_match_a_path": str(md / "arena_result_match_a.json"),
-                "arena_result_match_b_path": str(md / "arena_result_match_b.json"),
                 **common,
             }
         )
@@ -252,3 +251,50 @@ def test_initial_synthesis_3round_audit_requires_initial_propagation_manifest(tm
     tournament = _mk_fixture(tmp_path, tournament="pommerman_gptv16_a00_openclaw_initial_synthesis_3round_smoke")
     errors, _warnings = audit_openclaw_adaptive_3round_smoke(tournament)
     assert any("missing logs/round_1/initial_propagation_manifest.json" in e for e in errors)
+
+
+def test_adaptive_3round_audit_fails_when_source_submission_missing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tournament = _mk_fixture(tmp_path)
+    missing = (
+        tmp_path
+        / "workspace"
+        / "posts"
+        / tournament
+        / "a1"
+        / "codebase_post_1"
+        / "submission"
+        / "main.py"
+    )
+    missing.unlink()
+    errors, _warnings = audit_openclaw_adaptive_3round_smoke(tournament)
+    assert any("source submission missing" in e for e in errors)
+
+
+def test_adaptive_3round_audit_fails_when_target_submission_missing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tournament = _mk_fixture(tmp_path)
+    missing = (
+        tmp_path
+        / "workspace"
+        / "codebases"
+        / tournament
+        / "a1"
+        / "codebase_play_2"
+        / "submission"
+        / "main.py"
+    )
+    missing.unlink()
+    errors, _warnings = audit_openclaw_adaptive_3round_smoke(tournament)
+    assert any("target submission missing" in e for e in errors)
+
+
+def test_adaptive_3round_audit_fails_when_source_target_sha_differ(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tournament = _mk_fixture(tmp_path)
+    manifest_path = tmp_path / "logs" / "round_2" / "propagation_manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["agents"][0]["target_submission_sha256"] = "deadbeef" * 8
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    errors, _warnings = audit_openclaw_adaptive_3round_smoke(tournament)
+    assert any("source/target submission sha256 differ" in e for e in errors)

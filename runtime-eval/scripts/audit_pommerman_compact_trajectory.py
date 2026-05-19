@@ -39,7 +39,6 @@ def audit_compact_trajectory(logs_root: Path = Path("logs")) -> tuple[list[str],
                 continue
             required = [
                 md / "trajectory_compact_match_a.jsonl",
-                md / "trajectory_compact_match_b.jsonl",
                 md / "trajectory_events.json",
                 md / "trajectory_summary.json",
             ]
@@ -49,16 +48,16 @@ def audit_compact_trajectory(logs_root: Path = Path("logs")) -> tuple[list[str],
             if errors:
                 continue
 
-            for leg_path in [md / "trajectory_compact_match_a.jsonl", md / "trajectory_compact_match_b.jsonl"]:
-                try:
-                    for line_no, payload in _iter_jsonl(leg_path):
-                        if payload.get("schema_version") != "pommerman_compact_trajectory_step_v2":
-                            errors.append(f"{leg_path}: line {line_no} schema_version mismatch")
-                        bad_keys = FORBIDDEN_KEYS & set(payload.keys())
-                        if bad_keys:
-                            errors.append(f"{leg_path}: line {line_no} contains forbidden keys: {sorted(bad_keys)}")
-                except ValueError as exc:
-                    errors.append(str(exc))
+            leg_path = md / "trajectory_compact_match_a.jsonl"
+            try:
+                for line_no, payload in _iter_jsonl(leg_path):
+                    if payload.get("schema_version") != "pommerman_compact_trajectory_step_v2":
+                        errors.append(f"{leg_path}: line {line_no} schema_version mismatch")
+                    bad_keys = FORBIDDEN_KEYS & set(payload.keys())
+                    if bad_keys:
+                        errors.append(f"{leg_path}: line {line_no} contains forbidden keys: {sorted(bad_keys)}")
+            except ValueError as exc:
+                errors.append(str(exc))
 
             events = _load_json(md / "trajectory_events.json")
             if events.get("schema_version") != "pommerman_compact_trajectory_events_v2":

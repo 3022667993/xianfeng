@@ -266,29 +266,74 @@ class Pommerman1v1Adapter(BaseGameAdapter):
         right_ok = (right_build.returncode == 0) and (right_smoke.returncode == 0)
 
         arena_result_match_a_path = (round_dir / "arena_result_match_a.json").resolve()
-        arena_result_match_b_path = (round_dir / "arena_result_match_b.json").resolve()
         compact_match_a_path = (round_dir / "trajectory_compact_match_a.jsonl").resolve()
-        compact_match_b_path = (round_dir / "trajectory_compact_match_b.jsonl").resolve()
         trajectory_events_path = (round_dir / "trajectory_events.json").resolve()
         legacy_arena_result_path = round_dir / "arena_result.json"
         legacy_pair_scorecard_path = round_dir / "pair_scorecard.json"
+        legacy_match_b_path = round_dir / "arena_result_match_b.json"
+        legacy_compact_b_path = round_dir / "trajectory_compact_match_b.jsonl"
         if legacy_arena_result_path.exists():
             legacy_arena_result_path.unlink()
         if legacy_pair_scorecard_path.exists():
             legacy_pair_scorecard_path.unlink()
-        paired_match_id = f"{round_dir.name}_seat_swap_pair_1"
+        if legacy_match_b_path.exists():
+            legacy_match_b_path.unlink()
+        if legacy_compact_b_path.exists():
+            legacy_compact_b_path.unlink()
         left_submission_main = (left_codebase / "submission" / "main.py").resolve()
         right_submission_main = (right_codebase / "submission" / "main.py").resolve()
         fallback_seed_status = "requested_but_not_applied" if requested_seed is not None else "unsupported_by_environment"
 
+        def _fallback_match_payload(
+            *,
+            left_submission: Path,
+            right_submission: Path,
+            seat_assignment: dict[str, str],
+            req_seed: int | None,
+            app_seed: int | None,
+            normalized_seed: int | None,
+            seed_status: str,
+            seed_error: str | None,
+            methods_attempted: list[str],
+            method_applied: str | None,
+            env_seed_return: Any,
+        ) -> dict[str, Any]:
+            return {
+                "match_label": "match_a",
+                "schedule_mode": "double_round_robin",
+                "match_legs": ["match_a"],
+                "seat_swap": False,
+                "left_submission": str(left_submission),
+                "right_submission": str(right_submission),
+                "seat_assignment": seat_assignment,
+                "left_right_winner": "draw",
+                "steps": 0,
+                "done": False,
+                "reward": [0, 0, 0, 0],
+                "info": {"winners": []},
+                "requested_seed": req_seed,
+                "applied_seed": app_seed,
+                "seed": normalized_seed,
+                "seed_control_status": seed_status,
+                "seed_control_error": seed_error,
+                "seed_control_methods_attempted": methods_attempted,
+                "seed_control_method_applied": method_applied,
+                "seed_control_env_seed_return": env_seed_return,
+            }
+
+        req_a = requested_seed
+        app_a = seed_a = None
+        status_a = "requested_but_not_applied" if requested_seed is not None else "not_requested"
+        err_a = None
+        attempted_a = ["env.reset(seed=...)", "env.seed(...)"] if requested_seed is not None else []
+        method_a = None
+        env_seed_ret_a = None
+        runtime_ok = False
+        winner = "draw"
+        result = "build_or_smoke_failed"
+        stderr_excerpt = "build or smoke failed"
+
         if left_ok and right_ok:
-            req_a = req_b = requested_seed
-            app_a = app_b = seed_a = seed_b = None
-            status_a = status_b = "requested_but_not_applied"
-            err_a = err_b = None
-            attempted_a = attempted_b = ["env.reset(seed=...)", "env.seed(...)"] if requested_seed is not None else []
-            method_a = method_b = None
-            env_seed_ret_a = env_seed_ret_b = None
             arena_run_match_a = self._run_cmd(
                 left_codebase,
                 [
@@ -301,40 +346,18 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     str(requested_seed) if requested_seed is not None else "",
                 ],
             )
-            arena_run_match_b = self._run_cmd(
-                left_codebase,
-                [
-                    "bash",
-                    "scripts/run_arena.sh",
-                    str(arena_result_match_b_path),
-                    str(right_submission_main),
-                    str(left_submission_main),
-                    str(compact_match_b_path),
-                    str(requested_seed) if requested_seed is not None else "",
-                ],
-            )
-
             if arena_run_match_a.stderr:
                 stderr_chunks.append(f"[ARENA MATCH A STDERR]\\n{arena_run_match_a.stderr}")
-            if arena_run_match_b.stderr:
-                stderr_chunks.append(f"[ARENA MATCH B STDERR]\\n{arena_run_match_b.stderr}")
 
-            if (
-                arena_run_match_a.returncode == 0
-                and arena_run_match_b.returncode == 0
-                and arena_result_match_a_path.exists()
-                and arena_result_match_b_path.exists()
-            ):
+            if arena_run_match_a.returncode == 0 and arena_result_match_a_path.exists():
                 arena_payload_match_a = json.loads(arena_result_match_a_path.read_text(encoding="utf-8"))
-                arena_payload_match_b = json.loads(arena_result_match_b_path.read_text(encoding="utf-8"))
                 req_a, app_a, seed_a, status_a, err_a, attempted_a, method_a, env_seed_ret_a = self._seed_control_from_payload(
                     arena_payload_match_a, requested_seed
                 )
-                req_b, app_b, seed_b, status_b, err_b, attempted_b, method_b, env_seed_ret_b = self._seed_control_from_payload(
-                    arena_payload_match_b, requested_seed
-                )
-                arena_payload_match_a["paired_match_id"] = paired_match_id
                 arena_payload_match_a["match_label"] = "match_a"
+                arena_payload_match_a["schedule_mode"] = "double_round_robin"
+                arena_payload_match_a["match_legs"] = ["match_a"]
+                arena_payload_match_a["seat_swap"] = False
                 arena_payload_match_a["left_submission"] = str(left_submission_main)
                 arena_payload_match_a["right_submission"] = str(right_submission_main)
                 arena_payload_match_a["seat_assignment"] = {
@@ -343,48 +366,23 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     "seat_2_submission": "dummy2",
                     "seat_3_submission": "dummy3",
                 }
-                arena_payload_match_b["paired_match_id"] = paired_match_id
-                arena_payload_match_b["match_label"] = "match_b"
-                arena_payload_match_b["left_submission"] = str(left_submission_main)
-                arena_payload_match_b["right_submission"] = str(right_submission_main)
-                arena_payload_match_b["seat_assignment"] = {
-                    "seat_0_submission": "right",
-                    "seat_1_submission": "left",
-                    "seat_2_submission": "dummy2",
-                    "seat_3_submission": "dummy3",
-                }
-                for payload, req, app, seed, status, err, attempted, method, env_seed_ret in [
-                    (arena_payload_match_a, req_a, app_a, seed_a, status_a, err_a, attempted_a, method_a, env_seed_ret_a),
-                    (arena_payload_match_b, req_b, app_b, seed_b, status_b, err_b, attempted_b, method_b, env_seed_ret_b),
-                ]:
-                    payload["requested_seed"] = req
-                    payload["applied_seed"] = app
-                    payload["seed"] = seed
-                    payload["seed_control_status"] = status
-                    payload["seed_control_error"] = err
-                    payload["seed_control_methods_attempted"] = attempted
-                    payload["seed_control_method_applied"] = method
-                    payload["seed_control_env_seed_return"] = env_seed_ret
+                arena_payload_match_a["requested_seed"] = req_a
+                arena_payload_match_a["applied_seed"] = app_a
+                arena_payload_match_a["seed"] = seed_a
+                arena_payload_match_a["seed_control_status"] = status_a
+                arena_payload_match_a["seed_control_error"] = err_a
+                arena_payload_match_a["seed_control_methods_attempted"] = attempted_a
+                arena_payload_match_a["seed_control_method_applied"] = method_a
+                arena_payload_match_a["seed_control_env_seed_return"] = env_seed_ret_a
                 arena_result_match_a_path.write_text(
                     json.dumps(arena_payload_match_a, ensure_ascii=False, indent=2),
                     encoding="utf-8",
                 )
-                arena_result_match_b_path.write_text(
-                    json.dumps(arena_payload_match_b, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
                 rows_a = self._load_compact_rows(compact_match_a_path)
-                rows_b = self._load_compact_rows(compact_match_b_path)
                 for row in rows_a:
                     row["leg_label"] = "match_a"
-                for row in rows_b:
-                    row["leg_label"] = "match_b"
                 compact_match_a_path.write_text(
                     "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows_a),
-                    encoding="utf-8",
-                )
-                compact_match_b_path.write_text(
-                    "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows_b),
                     encoding="utf-8",
                 )
                 round_name = round_dir.parent.name
@@ -405,6 +403,8 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                 pair_id = "__vs__".join(sorted([left_agent_id, right_agent_id]))
                 trajectory_events_payload = {
                     "schema_version": "pommerman_compact_trajectory_events_v2",
+                    "schedule_mode": "double_round_robin",
+                    "match_legs": "single",
                     "round_idx": round_idx,
                     "match_idx": match_idx,
                     "match_id": round_dir.name,
@@ -415,79 +415,44 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                             trajectory_path=compact_match_a_path,
                             winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
                         ),
-                        "match_b": self._events_from_rows(
-                            rows_b,
-                            trajectory_path=compact_match_b_path,
-                            winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
-                        ),
                     },
                     "agent_event_summaries": {
                         left_agent_id: {
                             "agent_id": left_agent_id,
-                            "roles_seen": ["left", "right"],
-                            "observed_steps": [
-                                len(rows_a),
-                                len(rows_b),
-                            ],
+                            "roles_seen": ["left"],
+                            "observed_steps": [len(rows_a)],
                             "alive_change_observed": bool(
                                 self._events_from_rows(
                                     rows_a,
                                     trajectory_path=compact_match_a_path,
                                     winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
                                 )["alive_change_steps"]
-                                or self._events_from_rows(
-                                    rows_b,
-                                    trajectory_path=compact_match_b_path,
-                                    winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
-                                )["alive_change_steps"]
                             ),
-                            "terminal_outcomes": [
-                                self._events_from_rows(
-                                    rows_a,
-                                    trajectory_path=compact_match_a_path,
-                                    winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
-                                )["terminal_step"],
-                                self._events_from_rows(
-                                    rows_b,
-                                    trajectory_path=compact_match_b_path,
-                                    winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
-                                )["terminal_step"],
-                            ],
+                            "terminal_outcomes": [self._events_from_rows(
+                                rows_a,
+                                trajectory_path=compact_match_a_path,
+                                winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
+                            )["terminal_step"]],
                             "compact_process_observations": [
                                 "Compact trajectory captured without full board replay.",
                             ],
                         },
                         right_agent_id: {
                             "agent_id": right_agent_id,
-                            "roles_seen": ["left", "right"],
-                            "observed_steps": [
-                                len(rows_a),
-                                len(rows_b),
-                            ],
+                            "roles_seen": ["right"],
+                            "observed_steps": [len(rows_a)],
                             "alive_change_observed": bool(
                                 self._events_from_rows(
                                     rows_a,
                                     trajectory_path=compact_match_a_path,
                                     winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
                                 )["alive_change_steps"]
-                                or self._events_from_rows(
-                                    rows_b,
-                                    trajectory_path=compact_match_b_path,
-                                    winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
-                                )["alive_change_steps"]
                             ),
-                            "terminal_outcomes": [
-                                self._events_from_rows(
-                                    rows_a,
-                                    trajectory_path=compact_match_a_path,
-                                    winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
-                                )["terminal_step"],
-                                self._events_from_rows(
-                                    rows_b,
-                                    trajectory_path=compact_match_b_path,
-                                    winner_seats=((arena_payload_match_b.get("info") or {}).get("winners")),
-                                )["terminal_step"],
-                            ],
+                            "terminal_outcomes": [self._events_from_rows(
+                                rows_a,
+                                trajectory_path=compact_match_a_path,
+                                winner_seats=((arena_payload_match_a.get("info") or {}).get("winners")),
+                            )["terminal_step"]],
                             "compact_process_observations": [
                                 "Compact trajectory captured without full board replay.",
                             ],
@@ -506,14 +471,6 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     "seed_control_methods_attempted": attempted_a,
                     "seed_control_method_applied": method_a,
                     "seed_control_env_seed_return": env_seed_ret_a,
-                    "requested_seed_match_b": req_b,
-                    "applied_seed_match_b": app_b,
-                    "seed_match_b": seed_b,
-                    "seed_control_status_match_b": status_b,
-                    "seed_control_error_match_b": err_b,
-                    "seed_control_methods_attempted_match_b": attempted_b,
-                    "seed_control_method_applied_match_b": method_b,
-                    "seed_control_env_seed_return_match_b": env_seed_ret_b,
                 }
                 trajectory_events_path.write_text(
                     json.dumps(trajectory_events_payload, ensure_ascii=False, indent=2),
@@ -522,22 +479,16 @@ class Pommerman1v1Adapter(BaseGameAdapter):
 
                 scorecard_payload = {
                     **arena_payload_match_a,
-                    "paired_match_id": paired_match_id,
-                    "match_label": "match_a",
-                    "seat_assignment": {
-                        "seat_0_submission": "left",
-                        "seat_1_submission": "right",
-                        "seat_2_submission": "dummy2",
-                        "seat_3_submission": "dummy3",
+                    "seat_swap": False,
+                    "match_legs": ["match_a"],
+                    "schedule_mode": "double_round_robin",
+                    "scorecard_policy": "raw_per_match_scorecard; pair-level aggregation is post-analysis",
+                    "match_a": {
+                        "winner": arena_payload_match_a.get("left_right_winner", "draw"),
+                        "steps": arena_payload_match_a.get("steps"),
+                        "reward": arena_payload_match_a.get("reward"),
+                        "done": arena_payload_match_a.get("done"),
                     },
-                    "requested_seed": req_a,
-                    "applied_seed": app_a,
-                    "seed": seed_a,
-                    "seed_control_status": status_a,
-                    "seed_control_error": err_a,
-                    "seed_control_methods_attempted": attempted_a,
-                    "seed_control_method_applied": method_a,
-                    "seed_control_env_seed_return": env_seed_ret_a,
                 }
 
                 (round_dir / "scorecard.json").write_text(
@@ -547,44 +498,68 @@ class Pommerman1v1Adapter(BaseGameAdapter):
 
                 winner = arena_payload_match_a.get("left_right_winner", "draw")
                 result = "submission_vs_submission_ffa_proxy_completed"
-                runtime_ok = bool(arena_payload_match_a.get("done", False)) and bool(
-                    arena_payload_match_b.get("done", False)
-                )
+                runtime_ok = bool(arena_payload_match_a.get("done", False))
                 stderr_excerpt_parts = []
                 if arena_run_match_a.stderr:
                     stderr_excerpt_parts.append(arena_run_match_a.stderr[:150])
-                if arena_run_match_b.stderr:
-                    stderr_excerpt_parts.append(arena_run_match_b.stderr[:150])
                 stderr_excerpt = " | ".join(stderr_excerpt_parts)
             else:
-                env_seed_ret_a = env_seed_ret_b = None
                 if requested_seed is not None:
-                    err_a = err_b = "arena probe failed before seed application could be confirmed"
+                    err_a = "arena probe failed before seed application could be confirmed"
                 winner = "draw"
                 result = "arena_probe_failed"
                 runtime_ok = False
                 stderr_excerpt_parts = []
                 if arena_run_match_a.stderr:
                     stderr_excerpt_parts.append(arena_run_match_a.stderr[:150])
-                if arena_run_match_b.stderr:
-                    stderr_excerpt_parts.append(arena_run_match_b.stderr[:150])
                 stderr_excerpt = " | ".join(stderr_excerpt_parts) if stderr_excerpt_parts else "arena probe failed"
         else:
-            req_a = req_b = requested_seed
-            app_a = app_b = seed_a = seed_b = None
-            status_a = status_b = "requested_but_not_applied" if requested_seed is not None else "not_requested"
-            err_a = err_b = (
+            err_a = (
                 "build or smoke failed before seed application could be attempted"
                 if requested_seed is not None
                 else None
             )
-            attempted_a = attempted_b = ["env.reset(seed=...)", "env.seed(...)"] if requested_seed is not None else []
-            method_a = method_b = None
-            env_seed_ret_a = env_seed_ret_b = None
-            winner = "draw"
-            result = "build_or_smoke_failed"
-            runtime_ok = False
-            stderr_excerpt = "build or smoke failed"
+
+        if not arena_result_match_a_path.exists():
+            fallback_match_a = _fallback_match_payload(
+                left_submission=left_submission_main,
+                right_submission=right_submission_main,
+                seat_assignment={
+                    "seat_0_submission": "left",
+                    "seat_1_submission": "right",
+                    "seat_2_submission": "dummy2",
+                    "seat_3_submission": "dummy3",
+                },
+                req_seed=req_a,
+                app_seed=app_a,
+                normalized_seed=seed_a,
+                seed_status=status_a,
+                seed_error=err_a,
+                methods_attempted=attempted_a,
+                method_applied=method_a,
+                env_seed_return=env_seed_ret_a,
+            )
+            arena_result_match_a_path.write_text(
+                json.dumps(fallback_match_a, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        scorecard_path = round_dir / "scorecard.json"
+        if not scorecard_path.exists():
+            scorecard_payload = json.loads(arena_result_match_a_path.read_text(encoding="utf-8"))
+            scorecard_payload["seat_swap"] = False
+            scorecard_payload["match_legs"] = ["match_a"]
+            scorecard_payload["schedule_mode"] = "double_round_robin"
+            scorecard_payload["scorecard_policy"] = "raw_per_match_scorecard; pair-level aggregation is post-analysis"
+            scorecard_payload["match_a"] = {
+                "winner": scorecard_payload.get("left_right_winner", "draw"),
+                "steps": scorecard_payload.get("steps"),
+                "reward": scorecard_payload.get("reward"),
+                "done": scorecard_payload.get("done"),
+            }
+            scorecard_path.write_text(
+                json.dumps(scorecard_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
         (round_dir / "stderr.log").write_text("\\n\\n".join(stderr_chunks), encoding="utf-8")
 

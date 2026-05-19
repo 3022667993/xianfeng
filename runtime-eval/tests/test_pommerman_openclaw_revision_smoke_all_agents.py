@@ -28,7 +28,7 @@ def _mk_fixture(tmp_path: Path, tournament: str = "pommerman_gptv16_a00_openclaw
     for idx, (l, r) in enumerate([("a1", "a2"), ("a3", "a4"), ("a5", "a6")], start=1):
         md = round_dir / f"match_{idx}"
         md.mkdir(parents=True, exist_ok=True)
-        for name in ["metadata.json", "scorecard.json", "arena_result_match_a.json", "arena_result_match_b.json"]:
+        for name in ["metadata.json", "scorecard.json", "arena_result_match_a.json"]:
             (md / name).write_text("{}", encoding="utf-8")
         matches.append(
             {
@@ -48,7 +48,6 @@ def _mk_fixture(tmp_path: Path, tournament: str = "pommerman_gptv16_a00_openclaw
                 "metadata_path": str(md / "metadata.json"),
                 "scorecard_path": str(md / "scorecard.json"),
                 "arena_result_match_a_path": str(md / "arena_result_match_a.json"),
-                "arena_result_match_b_path": str(md / "arena_result_match_b.json"),
             }
         )
     (round_dir / "round_manifest.json").write_text(

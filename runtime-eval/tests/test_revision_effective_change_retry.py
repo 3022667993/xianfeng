@@ -94,3 +94,59 @@ def test_no_retry_when_effective_change_not_required(tmp_path, monkeypatch):
     )
     assert ok
     assert calls == [False]
+
+
+def test_timeout_is_retryable_and_returns_clear_failure(tmp_path, monkeypatch):
+    play, post = _mk_play(tmp_path)
+    calls = []
+
+    def fake_apply(*args, **kwargs):
+        calls.append(bool(kwargs.get("retry_on_noop")))
+        if len(calls) == 1:
+            return False, "openclaw timeout"
+        return False, "openclaw timeout"
+
+    monkeypatch.setattr(rev, "_apply_openclaw_minimal_revision", fake_apply)
+
+    ok, msg = rev.apply_minimal_revision(
+        play,
+        post,
+        2,
+        "left",
+        model_id="m1",
+        executor="openclaw-minimal",
+        openclaw_agent_id="main",
+        require_effective_submission_change=True,
+        revision_retry_on_noop=1,
+        revision_retry_on_timeout=1,
+    )
+    assert not ok
+    assert "openclaw timeout" in msg
+    assert calls == [False, True]
+
+
+def test_context_overflow_is_retryable_and_returns_distinct_failure(tmp_path, monkeypatch):
+    play, post = _mk_play(tmp_path)
+    calls = []
+
+    def fake_apply(*args, **kwargs):
+        calls.append(bool(kwargs.get("retry_on_noop")))
+        return False, "openclaw context overflow"
+
+    monkeypatch.setattr(rev, "_apply_openclaw_minimal_revision", fake_apply)
+
+    ok, msg = rev.apply_minimal_revision(
+        play,
+        post,
+        2,
+        "left",
+        model_id="m1",
+        executor="openclaw-minimal",
+        openclaw_agent_id="main",
+        require_effective_submission_change=True,
+        revision_retry_on_noop=1,
+        revision_retry_on_timeout=1,
+    )
+    assert not ok
+    assert msg == "openclaw context overflow"
+    assert calls == [False, True]

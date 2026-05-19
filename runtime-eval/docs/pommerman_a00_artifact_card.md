@@ -141,7 +141,6 @@ Not included:
   - `metadata.json`
   - `scorecard.json`
   - `arena_result_match_a.json`
-  - `arena_result_match_b.json`
   - `build.log`
   - `test.log`
   - `stderr.log`
@@ -149,10 +148,10 @@ Not included:
   - `agent_feedback_<agent_id>.json`
   - `agent_feedback_<agent_id>.md`
   - `trajectory_compact_match_a.jsonl`
-  - `trajectory_compact_match_b.jsonl`
   - `trajectory_events.json`
   - `notes/revision_log.md` and `revision_audit.json` from prior revisions when present
-- `process feedback v1` is a factual summary layer.
+- Current formal Pommerman scheduling uses `double_round_robin` with `match_legs=single`; `match_b` artifacts are not required.
+- `process feedback v2` is a factual summary layer.
 - compact trajectory v2 has run.
 - compact trajectory v2 is lightweight per-step process feedback.
 - compact trajectory v2 is not full replay.

@@ -97,7 +97,7 @@ def test_run_match_propagates_seed_provenance_into_trajectory_events(tmp_path, m
     assert events["seed_control_status"] == "applied"
     assert events["seed_control_method_applied"] == "env.seed(...)"
     assert events["seed_control_env_seed_return"] == [4242]
-    assert calls["arena"] == 2
+    assert calls["arena"] == 1
 
 
 def test_run_match_failed_arena_records_non_applied_details(tmp_path, monkeypatch):
