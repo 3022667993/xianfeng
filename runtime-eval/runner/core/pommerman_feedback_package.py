@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,37 @@ Notes:
 - Preserve public agent API.
 - Keep the submission runnable.
 - Do not rely on hidden state or private opponent code.
+"""
+
+V4_README = """# Round Feedback
+
+This directory contains public logs from your previous Pommerman matches.
+
+Use these logs to improve `submission/main.py` for future rounds.
+
+For game rules, action space, and the required submission API, refer to `../../README.md` in this current codebase. The root README is the source of truth.
+
+## Objective
+
+Improve future match performance. Prefer winning over drawing, and drawing over losing.
+
+Current schedule uses single-leg double round-robin. Each match package represents one game. Seat-bias is handled by later reversed encounters in the full double round-robin schedule, not by running multiple games inside one scheduled match.
+
+## Files
+
+- `public_scoreboard.json`: public outcomes for all matches in this round.
+- `matches/*/match_index.json`: your match opponent, seed, seat assignment, winner, steps, reward, and replay paths.
+- `matches/*/official_record_json/game_state.json`: Pommerman official per-step game-state record when available.
+- `matches/*/actions.jsonl`: per-step actions recorded by the wrapper/compact trajectory.
+- `matches/*/run_logs.txt`: build, test, and arena stderr logs.
+- `package_manifest.json`: package schema and replay-source metadata.
+
+## Constraints
+
+- Modify only `submission/main.py`.
+- Do not modify feedback files.
+- Do not rely on private opponent code or non-public artifacts.
+- Do not make cosmetic-only changes; changes should be intended to improve future match performance.
 """
 
 
@@ -110,6 +142,106 @@ def _copy_or_empty(src: Path, dst: Path) -> bool:
     return False
 
 
+_RUN_LOG_PRIVATE_PATH_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"/root/autodl-tmp/runtime-eval/workspace/codebases/[^\s\"'<>]+"),
+        "<workspace_codebases>",
+    ),
+    (
+        re.compile(r"/root/autodl-tmp/runtime-eval/workspace/posts/[^\s\"'<>]+"),
+        "<workspace_posts>",
+    ),
+    (
+        re.compile(r"/root/autodl-tmp/runtime-eval/workspace/submissions/[^\s\"'<>]+"),
+        "<workspace_submissions>",
+    ),
+    (
+        re.compile(r"/root/autodl-tmp/runtime-eval/openclaw_workspaces/[^\s\"'<>]+"),
+        "<openclaw_workspaces>",
+    ),
+    (
+        re.compile(r"/root/\.openclaw/[^\s\"'<>]+"),
+        "<openclaw_home>",
+    ),
+    (
+        re.compile(r"/tmp/[^\s\"'<>]+"),
+        "<tmp>",
+    ),
+]
+
+
+def sanitize_model_visible_run_log(text: str) -> str:
+    sanitized = text
+    for pattern, replacement in _RUN_LOG_PRIVATE_PATH_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
+
+
+def _read_compact_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if not path.exists():
+        return rows
+    for line in path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            rows.append(payload)
+    return rows
+
+
+def _seat_key(seat: str) -> str:
+    return "seat_0" if seat == "left" else "seat_1"
+
+
+def _actions_vector(actions: Any) -> list[Any]:
+    if isinstance(actions, list):
+        return actions
+    if isinstance(actions, dict):
+        return [actions.get(f"seat_{i}") for i in range(4)]
+    return [None, None, None, None]
+
+
+def _action_for_seat(actions: Any, seat: str) -> Any:
+    key = _seat_key(seat)
+    if isinstance(actions, dict):
+        return actions.get(key)
+    if isinstance(actions, list):
+        idx = 0 if seat == "left" else 1
+        return actions[idx] if len(actions) > idx else None
+    return None
+
+
+def _write_v4_actions(
+    *,
+    path: Path,
+    compact_path: Path,
+    agent_seat: str,
+    opponent_seat: str,
+) -> int:
+    rows = []
+    for payload in _read_compact_jsonl(compact_path):
+        actions = payload.get("actions")
+        rows.append(
+            {
+                "schema_version": "pommerman_actions_v1",
+                "internal_leg_id": "match_a",
+                "step": payload.get("step"),
+                "actions": _actions_vector(actions),
+                "agent_action": _action_for_seat(actions, agent_seat),
+                "opponent_action": _action_for_seat(actions, opponent_seat),
+                "agent_seat": agent_seat,
+                "opponent_seat": opponent_seat,
+            }
+        )
+    _write_jsonl(path, rows)
+    return len(rows)
+
+
 def _checksums_for_files(package_root: Path, relpaths: list[str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for rel in relpaths:
@@ -133,9 +265,20 @@ def write_feedback_package_for_agent(
     agent_id: str,
     round_match_records: list[dict[str, Any]],
     feedback_visibility: str = "own_matches_plus_public_scoreboard",
+    feedback_package_variant: str = "codeclash_v3",
 ) -> dict[str, Any]:
     if feedback_visibility != "own_matches_plus_public_scoreboard":
         raise ValueError("unsupported feedback_visibility")
+    if feedback_package_variant == "codeclash_v4":
+        return write_feedback_package_v4_for_agent(
+            tournament_name=tournament_name,
+            round_idx=round_idx,
+            agent_id=agent_id,
+            round_match_records=round_match_records,
+            feedback_visibility=feedback_visibility,
+        )
+    if feedback_package_variant not in {"", "codeclash_v3"}:
+        raise ValueError(f"unsupported feedback_package_variant: {feedback_package_variant}")
 
     post_root = Path("workspace/posts") / tournament_name / agent_id / f"codebase_post_{round_idx}"
     package_root = post_root / "feedback" / f"round_{round_idx}"
@@ -298,6 +441,150 @@ def write_feedback_package_for_agent(
     }
 
 
+def write_feedback_package_v4_for_agent(
+    *,
+    tournament_name: str,
+    round_idx: int,
+    agent_id: str,
+    round_match_records: list[dict[str, Any]],
+    feedback_visibility: str = "own_matches_plus_public_scoreboard",
+) -> dict[str, Any]:
+    if feedback_visibility != "own_matches_plus_public_scoreboard":
+        raise ValueError("unsupported feedback_visibility")
+
+    post_root = Path("workspace/posts") / tournament_name / agent_id / f"codebase_post_{round_idx}"
+    package_root = post_root / "feedback" / f"round_{round_idx}"
+    matches_root = package_root / "matches"
+    matches_root.mkdir(parents=True, exist_ok=True)
+
+    own_matches = [m for m in round_match_records if agent_id in {m["left_agent_id"], m["right_agent_id"]}]
+    own_matches = sorted(own_matches, key=lambda m: m["match_idx"])
+
+    public_scoreboard = {
+        "schema_version": "pommerman_public_scoreboard_v4",
+        "round": int(round_idx),
+        "schedule_mode": "double_round_robin",
+        "match_legs": "single",
+        "matches": [],
+    }
+    for rec in sorted(round_match_records, key=lambda m: m["match_idx"]):
+        match_dir = Path(rec["match_dir"])
+        arena = _load_json(match_dir / "arena_result_match_a.json") if (match_dir / "arena_result_match_a.json").exists() else {}
+        public_scoreboard["matches"].append(
+            {
+                "round": int(round_idx),
+                "match_id": rec["match_id"],
+                "left_agent_id": rec["left_agent_id"],
+                "right_agent_id": rec["right_agent_id"],
+                "winner": _winner(arena.get("left_right_winner")),
+                "steps": arena.get("steps"),
+                "reward": arena.get("reward"),
+                "applied_seed": rec.get("applied_seed"),
+            }
+        )
+
+    (package_root / "README.md").write_text(V4_README, encoding="utf-8")
+    (package_root / "public_scoreboard.json").write_text(
+        json.dumps(public_scoreboard, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    manifest_matches: list[str] = []
+    replay_sources: set[str] = set()
+    full_board_replay = True
+
+    for rec in own_matches:
+        match_dir = Path(rec["match_dir"])
+        match_pkg = matches_root / rec["match_id"]
+        official_pkg_dir = match_pkg / "official_record_json"
+        official_pkg_dir.mkdir(parents=True, exist_ok=True)
+
+        arena = _load_json(match_dir / "arena_result_match_a.json") if (match_dir / "arena_result_match_a.json").exists() else {}
+        agent_seat = _seat_for_agent(agent_id, rec["left_agent_id"], rec["right_agent_id"])
+        opponent_seat = "right" if agent_seat == "left" else "left"
+        opponent_agent_id = _opponent_agent_id(agent_id, rec["left_agent_id"], rec["right_agent_id"])
+
+        official_src = match_dir / "official_record_json_match_a" / "game_state.json"
+        official_present = official_src.exists()
+        if official_present:
+            shutil.copy2(official_src, official_pkg_dir / "game_state.json")
+            replay_sources.add("pommerman_record_json_dir")
+        else:
+            replay_sources.add("compact_trajectory_fallback")
+            full_board_replay = False
+
+        actions_rel = "actions.jsonl"
+        _write_v4_actions(
+            path=match_pkg / actions_rel,
+            compact_path=match_dir / "trajectory_compact_match_a.jsonl",
+            agent_seat=agent_seat,
+            opponent_seat=opponent_seat,
+        )
+
+        match_index = {
+            "schema_version": "pommerman_match_index_v4",
+            "round": int(round_idx),
+            "match_id": rec["match_id"],
+            "agent_id": agent_id,
+            "opponent_agent_id": opponent_agent_id,
+            "requested_seed": rec.get("requested_seed"),
+            "applied_seed": rec.get("applied_seed"),
+            "schedule_mode": "double_round_robin",
+            "match_legs": "single",
+            "seat_swap": False,
+            "game": {
+                "internal_leg_id": "match_a",
+                "agent_seat": agent_seat,
+                "opponent_seat": opponent_seat,
+                "winner": _winner(arena.get("left_right_winner")),
+                "steps": arena.get("steps"),
+                "reward": arena.get("reward"),
+                "official_record_path": "official_record_json/game_state.json",
+                "actions_path": actions_rel,
+            },
+        }
+        (match_pkg / "match_index.json").write_text(
+            json.dumps(match_index, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        run_logs_parts: list[str] = []
+        for src_name in ["build.log", "test.log", "stderr.log"]:
+            run_logs_parts.append(f"=== {src_name} ===")
+            src = match_dir / src_name
+            run_logs_parts.append(src.read_text(encoding="utf-8") if src.exists() else "<missing>")
+        (match_pkg / "run_logs.txt").write_text(
+            sanitize_model_visible_run_log("\n".join(run_logs_parts)), encoding="utf-8"
+        )
+        manifest_matches.append(f"matches/{rec['match_id']}/match_index.json")
+
+    replay_source = "pommerman_record_json_dir" if replay_sources == {"pommerman_record_json_dir"} else "compact_trajectory_fallback"
+    if replay_source == "compact_trajectory_fallback":
+        full_board_replay = False
+    package_manifest = {
+        "schema_version": "pommerman_feedback_package_v4",
+        "round": int(round_idx),
+        "agent_id": agent_id,
+        "visibility": feedback_visibility,
+        "schedule_mode": "double_round_robin",
+        "match_legs": "single",
+        "matches": manifest_matches,
+        "replay_source": replay_source,
+        "full_board_replay": bool(full_board_replay),
+        "contains_private_opponent_code": False,
+    }
+    (package_root / "package_manifest.json").write_text(
+        json.dumps(package_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    return {
+        "agent_id": agent_id,
+        "package_root": str(package_root),
+        "own_match_count": len(own_matches),
+        "public_scoreboard_path": str(package_root / "public_scoreboard.json"),
+        "replay_source": replay_source,
+        "full_board_replay": bool(full_board_replay),
+    }
+
+
 def stage_feedback_packages_for_round(
     *,
     tournament_name: str,
@@ -305,6 +592,7 @@ def stage_feedback_packages_for_round(
     agent_ids: list[str],
     round_match_records: list[dict[str, Any]],
     feedback_visibility: str = "own_matches_plus_public_scoreboard",
+    feedback_package_variant: str = "codeclash_v3",
 ) -> dict[str, Any]:
     from runner.core.fsops import copy_tree
 
@@ -322,6 +610,7 @@ def stage_feedback_packages_for_round(
             agent_id=agent_id,
             round_match_records=round_match_records,
             feedback_visibility=feedback_visibility,
+            feedback_package_variant=feedback_package_variant,
         )
         created.append(agent_id)
 
@@ -333,4 +622,11 @@ def stage_feedback_packages_for_round(
     }
 
 
-__all__ = ["write_feedback_package_for_agent", "stage_feedback_packages_for_round", "NEUTRAL_README"]
+__all__ = [
+    "write_feedback_package_for_agent",
+    "write_feedback_package_v4_for_agent",
+    "stage_feedback_packages_for_round",
+    "sanitize_model_visible_run_log",
+    "NEUTRAL_README",
+    "V4_README",
+]

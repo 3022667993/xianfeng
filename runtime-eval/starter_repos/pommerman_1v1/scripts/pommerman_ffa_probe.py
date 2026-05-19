@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import shutil
 from pathlib import Path
 import sys
 from typing import Any
@@ -118,6 +119,44 @@ def _compact_counts(state: Any) -> tuple[dict[str, int | None], list[str]]:
     return counts, notes
 
 
+def _normalize_record_json_dir(record_json_dir: Path | None) -> bool:
+    if record_json_dir is None:
+        return False
+    canonical = record_json_dir / "game_state.json"
+    if canonical.exists():
+        return True
+    candidates = sorted(
+        p for p in record_json_dir.rglob("game_state.json")
+        if p.is_file() and p.resolve() != canonical.resolve()
+    )
+    if not candidates:
+        return False
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(candidates[0], canonical)
+    return canonical.exists()
+
+
+def _make_env(env_id: str, agent_list: list[Any], record_json_dir: Path | None):
+    if record_json_dir is not None:
+        record_json_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            return pommerman.make(env_id, agent_list, record_json_dir=str(record_json_dir))
+        except TypeError:
+            pass
+    env = pommerman.make(env_id, agent_list)
+    if record_json_dir is not None:
+        for attr, value in [
+            ("record_json_dir", str(record_json_dir)),
+            ("_record_json_dir", str(record_json_dir)),
+            ("save_json", True),
+        ]:
+            try:
+                setattr(env, attr, value)
+            except Exception:
+                pass
+    return env
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True)
@@ -125,6 +164,7 @@ def main():
     parser.add_argument("--right-submission", required=True)
     parser.add_argument("--compact-out", default=None)
     parser.add_argument("--requested-seed", type=int, default=None)
+    parser.add_argument("--record-json-dir", default=None)
     args = parser.parse_args()
 
     out_path = Path(args.out).resolve()
@@ -132,6 +172,9 @@ def main():
     compact_out = Path(args.compact_out).resolve() if args.compact_out else None
     if compact_out is not None:
         compact_out.parent.mkdir(parents=True, exist_ok=True)
+    record_json_dir = Path(args.record_json_dir).resolve() if args.record_json_dir else None
+    if record_json_dir is not None:
+        record_json_dir.mkdir(parents=True, exist_ok=True)
 
     left_main = Path(args.left_submission).resolve()
     right_main = Path(args.right_submission).resolve()
@@ -151,7 +194,7 @@ def main():
         agents.SimpleAgent(),
     ]
 
-    env = pommerman.make(env_id, agent_list)
+    env = _make_env(env_id, agent_list, record_json_dir)
 
     try:
         seed_provenance = apply_env_seed(env, requested_seed, prior_provenance=pre_env_seed_provenance)
@@ -258,6 +301,7 @@ def main():
         print(json.dumps(payload, ensure_ascii=False))
     finally:
         env.close()
+        _normalize_record_json_dir(record_json_dir)
 
 
 if __name__ == "__main__":

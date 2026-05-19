@@ -46,8 +46,8 @@
 - Full board/observation replay is still future work unless a later feedback package adds an official replay source such as `record_json_dir`.
 
 ## Feedback
-- Feedback Package v3 is current.
-- Feedback Package v3 uses factual match metadata, scorecards, process feedback, compact trajectory summaries, and revision provenance.
+- Feedback Package v4 is current.
+- Feedback Package v4 uses factual match metadata, scorecards, official record JSON when available, compact trajectory actions, and public runtime logs.
 - Compact trajectory v2 is lightweight process feedback, not full replay.
 - Death causes, bomb ownership, and power-up pickup causes remain future work unless supported by compact fields or a later replay artifact.
 

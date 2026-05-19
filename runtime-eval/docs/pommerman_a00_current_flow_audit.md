@@ -33,7 +33,7 @@
 - Match artifacts include `metadata.json`, `scorecard.json`, `arena_result_match_a.json`, trajectory summaries/events, compact trajectory for `match_a`, and per-agent feedback files.
 
 ### Feedback Phase
-- Feedback Package v3 is current.
+- Feedback Package v4 is current.
 - Process feedback v2 and compact trajectory v2 are current factual summary layers.
 - Full board/observation replay remains future work.
 

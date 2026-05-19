@@ -37,6 +37,51 @@ def _feedback_package_root(*, posts_root: Path, tournament: str, agent_id: str, 
     return posts_root / tournament / agent_id / f"codebase_post_{round_idx}" / "feedback" / f"round_{round_idx}"
 
 
+def _feedback_package_v4_metrics(package_roots: list[Path]) -> dict[str, Any]:
+    replay_source_counts: dict[str, int] = {}
+    full_board_replay_true = 0
+    full_board_replay_false = 0
+    official_record_present = 0
+    official_record_missing = 0
+    v4_package_count = 0
+    for root in package_roots:
+        manifest_path = root / "package_manifest.json"
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest = _load_json(manifest_path)
+        except Exception:
+            continue
+        if manifest.get("schema_version") != "pommerman_feedback_package_v4":
+            continue
+        v4_package_count += 1
+        replay_source = str(manifest.get("replay_source") or "unknown")
+        replay_source_counts[replay_source] = replay_source_counts.get(replay_source, 0) + 1
+        if manifest.get("full_board_replay") is True:
+            full_board_replay_true += 1
+        else:
+            full_board_replay_false += 1
+        matches = manifest.get("matches", [])
+        if not isinstance(matches, list):
+            continue
+        for rel in matches:
+            if not isinstance(rel, str):
+                continue
+            game_state = (root / rel).parent / "official_record_json" / "game_state.json"
+            if game_state.exists():
+                official_record_present += 1
+            else:
+                official_record_missing += 1
+    return {
+        "v4_package_count": v4_package_count,
+        "replay_source_counts": replay_source_counts,
+        "full_board_replay_true": full_board_replay_true,
+        "full_board_replay_false": full_board_replay_false,
+        "official_record_present": official_record_present,
+        "official_record_missing": official_record_missing,
+    }
+
+
 def _infer_agent_ids_from_round_manifest(round_manifest: dict[str, Any]) -> list[str]:
     ids: set[str] = set()
     matches = round_manifest.get("matches", [])
@@ -175,6 +220,7 @@ def build_tournament_report(
     incomplete = False
     pair_counts: dict[tuple[str, str], list[tuple[str, str]]] = {}
     games_seen = 0
+    all_feedback_package_roots: list[Path] = []
 
     for rd in round_dirs:
         try:
@@ -293,9 +339,24 @@ def build_tournament_report(
                 for aid in expected_agent_ids_for_package
                 if _feedback_package_root(posts_root=posts_root, tournament=tournament, agent_id=aid, round_idx=round_idx).exists()
             )
+            package_roots_for_round = [
+                _feedback_package_root(posts_root=posts_root, tournament=tournament, agent_id=aid, round_idx=round_idx)
+                for aid in expected_agent_ids_for_package
+                if _feedback_package_root(posts_root=posts_root, tournament=tournament, agent_id=aid, round_idx=round_idx).exists()
+            ]
+        else:
+            package_roots_for_round = [
+                _feedback_package_root(posts_root=posts_root, tournament=tournament, agent_id=aid, round_idx=round_idx)
+                for aid in candidate_agent_ids_for_package
+                if _feedback_package_root(posts_root=posts_root, tournament=tournament, agent_id=aid, round_idx=round_idx).exists()
+            ]
+        all_feedback_package_roots.extend(package_roots_for_round)
+        v4_round_metrics = _feedback_package_v4_metrics(package_roots_for_round)
         expected_agents_with_package = len(expected_agent_ids_for_package)
         feedback_packages_present = (expected_agents_with_package > 0) or (agents_with_package > 0)
         if expected_agents_with_package > agents_with_package:
+            incomplete = True
+        if v4_round_metrics["official_record_missing"] and v4_round_metrics["full_board_replay_true"]:
             incomplete = True
 
         propagation_present = (logs_root / f"round_{round_idx + 1}" / "propagation_manifest.json").exists()
@@ -324,6 +385,7 @@ def build_tournament_report(
                     "present": feedback_packages_present,
                     "agents_with_package": agents_with_package,
                     "expected_agents_with_package": expected_agents_with_package,
+                    **v4_round_metrics,
                 },
                 "revision": {"present": revision_present, "agents": revision_agents},
                 "propagation_to_next_round": {
@@ -408,11 +470,12 @@ def build_tournament_report(
     except Exception:
         pass
 
+    feedback_replay_summary = _feedback_package_v4_metrics(all_feedback_package_roots)
     limitations = [
-        "public_state_replay_v1 is derived from compact trajectory and is not full replay.",
-        "seat-bias is controlled by later reversed encounter in full double round-robin, not within-match paired legs.",
+        "Feedback Package v4 uses official record_json_dir when available and compact trajectory fallback otherwise.",
+        "seat-bias is controlled by later reversed encounter in full double round-robin, not by running multiple games inside one scheduled match.",
         "A 3-round smoke is only a prefix of the full double round-robin schedule.",
-        "Full board/observation replay remains future work.",
+        "Full board/observation replay is only claimed when official game_state.json records are present.",
     ]
 
     report: dict[str, Any] = {
@@ -427,6 +490,7 @@ def build_tournament_report(
         "prompt_variants": prompt_variants,
         "feedback_package_variant": feedback_package_variant,
         "feedback_visibility": feedback_visibility,
+        "feedback_replay_summary": feedback_replay_summary,
         "model_roster": roster,
         "initial_synthesis": initial_section,
         "rounds": rounds_out,
@@ -497,6 +561,16 @@ def render_tournament_report_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- revision_prompt_variant: {pv.get('revision_prompt_variant')}")
     lines.append(f"- feedback_package_variant: {report.get('feedback_package_variant')}")
     lines.append(f"- feedback_visibility: {report.get('feedback_visibility')}")
+    lines.append("")
+
+    frs = report.get("feedback_replay_summary") or {}
+    lines.append("## Feedback Replay")
+    lines.append("")
+    lines.append(f"- replay_source_counts: {frs.get('replay_source_counts')}")
+    lines.append(f"- full_board_replay_true: {frs.get('full_board_replay_true')}")
+    lines.append(f"- full_board_replay_false: {frs.get('full_board_replay_false')}")
+    lines.append(f"- official_record_present: {frs.get('official_record_present')}")
+    lines.append(f"- official_record_missing: {frs.get('official_record_missing')}")
     lines.append("")
 
     roster = report.get("model_roster") or []

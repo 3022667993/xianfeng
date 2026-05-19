@@ -3,16 +3,46 @@ set -euo pipefail
 
 echo "=== Pommerman+A00 Current Artifact Audit ==="
 
-test -f logs/round_1/metadata.json
-test -f logs/round_1/scorecard.json
-test -f logs/round_1/feedback_package.json
-test -f logs/round_1/arena_result_match_a.json
-test -f logs/round_1/arena_result_match_b.json
-test -f logs/round_2/metadata.json
-test -f logs/round_2/scorecard.json
-test -f logs/round_2/feedback_package.json
-test -f logs/round_2/arena_result_match_a.json
-test -f logs/round_2/arena_result_match_b.json
+python - <<'PY'
+import json
+from pathlib import Path
+
+for round_idx in [1, 2]:
+    round_dir = Path("logs") / f"round_{round_idx}"
+    manifest_path = round_dir / "round_manifest.json"
+    if not manifest_path.exists():
+        raise SystemExit(f"missing {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schedule_mode") != "double_round_robin":
+        raise SystemExit(f"{manifest_path}: schedule_mode must be double_round_robin")
+    if manifest.get("match_legs") != "single":
+        raise SystemExit(f"{manifest_path}: match_legs must be single")
+    matches = manifest.get("matches", [])
+    if not isinstance(matches, list) or not matches:
+        raise SystemExit(f"{manifest_path}: expected non-empty matches list")
+    for rec in matches:
+        match_idx = rec.get("match_idx")
+        if not isinstance(match_idx, int):
+            raise SystemExit(f"{manifest_path}: match record missing integer match_idx")
+        match_dir = round_dir / f"match_{match_idx}"
+        for name in [
+            "metadata.json",
+            "scorecard.json",
+            "arena_result_match_a.json",
+            "trajectory_compact_match_a.jsonl",
+        ]:
+            path = match_dir / name
+            if not path.exists():
+                raise SystemExit(f"missing {path}")
+        for stale in [
+            "arena_result_match_b.json",
+            "trajectory_compact_match_b.jsonl",
+        ]:
+            path = match_dir / stale
+            if path.exists():
+                raise SystemExit(f"{path} must not exist in current single-leg double_rr runs")
+print("PASS current single-leg double_rr match artifacts")
+PY
 
 python - <<'PY'
 import yaml

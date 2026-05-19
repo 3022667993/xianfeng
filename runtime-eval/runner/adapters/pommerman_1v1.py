@@ -75,6 +75,21 @@ class Pommerman1v1Adapter(BaseGameAdapter):
         return rows
 
     @staticmethod
+    def _normalize_official_record_dir(record_dir: Path) -> bool:
+        canonical = record_dir / "game_state.json"
+        if canonical.exists():
+            return True
+        candidates = sorted(
+            p for p in record_dir.rglob("game_state.json")
+            if p.is_file() and p.resolve() != canonical.resolve()
+        )
+        if not candidates:
+            return False
+        canonical.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(candidates[0], canonical)
+        return canonical.exists()
+
+    @staticmethod
     def _events_from_rows(
         rows: list[dict[str, Any]],
         *,
@@ -267,11 +282,13 @@ class Pommerman1v1Adapter(BaseGameAdapter):
 
         arena_result_match_a_path = (round_dir / "arena_result_match_a.json").resolve()
         compact_match_a_path = (round_dir / "trajectory_compact_match_a.jsonl").resolve()
+        official_record_match_a_dir = (round_dir / "official_record_json_match_a").resolve()
         trajectory_events_path = (round_dir / "trajectory_events.json").resolve()
         legacy_arena_result_path = round_dir / "arena_result.json"
         legacy_pair_scorecard_path = round_dir / "pair_scorecard.json"
         legacy_match_b_path = round_dir / "arena_result_match_b.json"
         legacy_compact_b_path = round_dir / "trajectory_compact_match_b.jsonl"
+        legacy_official_record_b = round_dir / "official_record_json_match_b"
         if legacy_arena_result_path.exists():
             legacy_arena_result_path.unlink()
         if legacy_pair_scorecard_path.exists():
@@ -280,6 +297,11 @@ class Pommerman1v1Adapter(BaseGameAdapter):
             legacy_match_b_path.unlink()
         if legacy_compact_b_path.exists():
             legacy_compact_b_path.unlink()
+        if legacy_official_record_b.exists():
+            shutil.rmtree(legacy_official_record_b)
+        if official_record_match_a_dir.exists():
+            shutil.rmtree(official_record_match_a_dir)
+        official_record_match_a_dir.mkdir(parents=True, exist_ok=True)
         left_submission_main = (left_codebase / "submission" / "main.py").resolve()
         right_submission_main = (right_codebase / "submission" / "main.py").resolve()
         fallback_seed_status = "requested_but_not_applied" if requested_seed is not None else "unsupported_by_environment"
@@ -344,8 +366,11 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     str(right_submission_main),
                     str(compact_match_a_path),
                     str(requested_seed) if requested_seed is not None else "",
+                    "--record-json-dir",
+                    str(official_record_match_a_dir),
                 ],
             )
+            self._normalize_official_record_dir(official_record_match_a_dir)
             if arena_run_match_a.stderr:
                 stderr_chunks.append(f"[ARENA MATCH A STDERR]\\n{arena_run_match_a.stderr}")
 
@@ -374,6 +399,9 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                 arena_payload_match_a["seed_control_methods_attempted"] = attempted_a
                 arena_payload_match_a["seed_control_method_applied"] = method_a
                 arena_payload_match_a["seed_control_env_seed_return"] = env_seed_ret_a
+                arena_payload_match_a["official_record_json_match_a_path"] = str(
+                    official_record_match_a_dir / "game_state.json"
+                )
                 arena_result_match_a_path.write_text(
                     json.dumps(arena_payload_match_a, ensure_ascii=False, indent=2),
                     encoding="utf-8",

@@ -65,10 +65,14 @@ The runner preserves raw match artifacts such as:
 metadata.json
 scorecard.json
 arena_result_match_a.json
-arena_result_match_b.json
+trajectory_compact_match_a.jsonl
+official_record_json_match_a/game_state.json
 ```
 
-Do not create paired aggregate scorecards inside this starter repo. Pair-level aggregation is a post-analysis task outside the submission.
+`arena_result_match_a.json` is the single-game arena result for the scheduled match.
+`trajectory_compact_match_a.jsonl` is the single-game compact trajectory.
+`official_record_json_match_a/game_state.json` may be generated when official Pommerman record JSON is enabled.
+Do not create paired aggregate scorecards or additional per-match games inside this starter repo. Pair-level aggregation is a post-analysis task outside the submission.
 
 ## 4. Objective
 
@@ -654,7 +658,6 @@ A boring agent that survives is often better than an aggressive agent that kills
 * [https://pommerman.readthedocs.io/en/latest/README/](https://pommerman.readthedocs.io/en/latest/README/)
 * [https://pommerman.readthedocs.io/en/latest/game_rules/](https://pommerman.readthedocs.io/en/latest/game_rules/)
 * [https://github.com/MultiAgentLearning/playground](https://github.com/MultiAgentLearning/playground)
-
 
 
 

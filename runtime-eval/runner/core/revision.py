@@ -628,9 +628,9 @@ def apply_minimal_revision(
     log_path = notes_dir / "revision_log.md"
     previous_winner = _read_feedback_winner(round_idx)
 
-    # Feedback Package v3 (CodeClash-style) is written into the post codebase so OpenClaw can
+    # Feedback Package v3/v4 (CodeClash-style) is written into the post codebase so OpenClaw can
     # reference it as `codebase_post_t/feedback/round_<round>` during revision.
-    if feedback_package_variant == "codeclash_v3":
+    if feedback_package_variant in {"codeclash_v3", "codeclash_v4"}:
         tournament_name, tournament_agent_id = _infer_post_context(codebase_post_dir)
         feedback_round_idx = _infer_codebase_post_round_idx(codebase_post_dir)
         norm_records = _normalize_round_match_records(round_match_records)
@@ -644,6 +644,7 @@ def apply_minimal_revision(
                     agent_id=tournament_agent_id,
                     round_match_records=norm_records,
                     feedback_visibility=feedback_visibility or "own_matches_plus_public_scoreboard",
+                    feedback_package_variant=feedback_package_variant or "codeclash_v3",
                 )
             except Exception:
                 # Fail-open for now: feedback package generation should not break revisions.

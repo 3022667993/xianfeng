@@ -53,10 +53,6 @@ def _compact_leg_metrics(match_dir: Path, leg_label: str, tested_side: str) -> d
     }
 
 
-def _has_match_b(match_dir: Path) -> bool:
-    return (match_dir / "arena_result_match_b.json").exists() or (match_dir / "trajectory_compact_match_b.jsonl").exists()
-
-
 def _seat_result(leg: dict, side: str) -> str:
     winner = _winner_from_lr(leg.get("left_right_winner"))
     if winner == "draw":
@@ -116,8 +112,7 @@ def build_trajectory_summary(match_dir: Path, round_idx: int, match_idx: int) ->
         "seat_swap_summary": {
             "same_requested_seed": True,
             "match_a_left_right_winner": leg["left_right_winner"],
-            "match_b_left_right_winner": None,
-            "outcome_changed_under_swap": None if not _has_match_b(match_dir) else False,
+            "outcome_changed_under_swap": None,
             "dummy_win_any_leg": False,
             "tested_agent_win_any_leg": any(x in {"win"} for x in [left_result, right_result]),
             "both_tested_agents_lost_any_leg": bool(left_result == "loss" and right_result == "loss"),

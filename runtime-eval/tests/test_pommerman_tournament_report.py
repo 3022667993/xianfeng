@@ -19,13 +19,15 @@ def test_tournament_report_writes_json_and_md(tmp_path, monkeypatch):
     md = rd / "match_1"
     md.mkdir(parents=True, exist_ok=True)
     _write_json(md / "arena_result_match_a.json", {"steps": 2, "reward": [0, 0, 0, 0], "left_right_winner": "draw"})
-    _write_json(md / "arena_result_match_b.json", {"steps": 2, "reward": [0, 0, 0, 0], "left_right_winner": "draw"})
+    _write_json(md / "scorecard.json", {"seat_swap": False, "match_legs": "single", "left_right_winner": "draw"})
     _write_json(md / "metadata.json", {"left_agent_id": "a1", "right_agent_id": "a2", "applied_seed": 123, "requested_seed": 123})
 
     _write_json(
         rd / "round_manifest.json",
         {
             "round_idx": 1,
+            "schedule_mode": "double_round_robin",
+            "match_legs": "single",
             "matches": [
                 {"match_id": "match_1", "match_idx": 1, "left_agent_id": "a1", "right_agent_id": "a2", "applied_seed": 123},
             ],
@@ -64,6 +66,11 @@ def test_tournament_report_writes_json_and_md(tmp_path, monkeypatch):
     assert parsed["tournament_name"] == t
     assert isinstance(parsed.get("rounds"), list)
     assert "limitations" in parsed
+    match = parsed["rounds"][0]["matches"][0]
+    assert match["winner"] == "draw"
+    assert match["steps"] == 2
+    assert "match_a" not in match
+    assert "match_b" not in match
 
     md_text = (tmp_path / "logs" / "tournament_report.md").read_text(encoding="utf-8")
     assert "## Model Roster" in md_text
@@ -101,12 +108,14 @@ def test_tournament_report_counts_feedback_packages_even_without_revision_manife
     md = rd / "match_1"
     md.mkdir(parents=True, exist_ok=True)
     _write_json(md / "arena_result_match_a.json", {"steps": 2, "reward": [0, 0, 0, 0], "left_right_winner": "draw"})
-    _write_json(md / "arena_result_match_b.json", {"steps": 2, "reward": [0, 0, 0, 0], "left_right_winner": "draw"})
+    _write_json(md / "scorecard.json", {"seat_swap": False, "match_legs": "single", "left_right_winner": "draw"})
     _write_json(md / "metadata.json", {"left_agent_id": "a1", "right_agent_id": "a2", "applied_seed": 123, "requested_seed": 123})
     _write_json(
         rd / "round_manifest.json",
         {
             "round_idx": 1,
+            "schedule_mode": "double_round_robin",
+            "match_legs": "single",
             "matches": [
                 {"match_id": "match_1", "match_idx": 1, "left_agent_id": "a1", "right_agent_id": "a2", "applied_seed": 123},
             ],
@@ -136,6 +145,70 @@ def test_tournament_report_counts_feedback_packages_even_without_revision_manife
     assert fp["present"] is True
     assert fp["agents_with_package"] == 2
     assert fp["expected_agents_with_package"] == 3
+
+
+def test_tournament_report_summarizes_v4_replay_sources(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    t = "t_v4_report"
+    logs_root = tmp_path / "logs"
+    posts_root = tmp_path / "workspace" / "posts"
+    match_dir = logs_root / "round_1" / "match_1"
+    package_root = posts_root / t / "a1" / "codebase_post_1" / "feedback" / "round_1"
+    match_pkg = package_root / "matches" / "match_1"
+    match_dir.mkdir(parents=True, exist_ok=True)
+    match_pkg.mkdir(parents=True, exist_ok=True)
+
+    _write_json(match_dir / "arena_result_match_a.json", {"steps": 2, "reward": [0, 0, 0, 0], "left_right_winner": "draw"})
+    _write_json(match_dir / "metadata.json", {"left_agent_id": "a1", "right_agent_id": "a2", "applied_seed": 123, "requested_seed": 123})
+    _write_json(
+        logs_root / "round_1" / "round_manifest.json",
+        {
+            "round_idx": 1,
+            "schedule_mode": "double_round_robin",
+            "match_legs": "single",
+            "matches": [
+                {"match_id": "match_1", "match_idx": 1, "left_agent_id": "a1", "right_agent_id": "a2", "applied_seed": 123},
+            ],
+            "feedback_package_variant": "codeclash_v4",
+            "feedback_visibility": "own_matches_plus_public_scoreboard",
+        },
+    )
+    _write_json(
+        logs_root / "round_1" / "revision_manifest.json",
+        {"agents": [{"agent_id": "a1", "revision_attempted": True, "revision_ok": True}]},
+    )
+    (package_root / "README.md").write_text("stub ../../README.md", encoding="utf-8")
+    _write_json(package_root / "public_scoreboard.json", {"matches": []})
+    (match_pkg / "official_record_json").mkdir(parents=True, exist_ok=True)
+    _write_json(match_pkg / "official_record_json" / "game_state.json", {"state": []})
+    _write_json(match_pkg / "match_index.json", {"schema_version": "pommerman_match_index_v4"})
+    (match_pkg / "actions.jsonl").write_text("{}\n", encoding="utf-8")
+    (match_pkg / "run_logs.txt").write_text("logs", encoding="utf-8")
+    _write_json(
+        package_root / "package_manifest.json",
+        {
+            "schema_version": "pommerman_feedback_package_v4",
+            "round": 1,
+            "agent_id": "a1",
+            "visibility": "own_matches_plus_public_scoreboard",
+            "schedule_mode": "double_round_robin",
+            "match_legs": "single",
+            "matches": ["matches/match_1/match_index.json"],
+            "replay_source": "pommerman_record_json_dir",
+            "full_board_replay": True,
+            "contains_private_opponent_code": False,
+        },
+    )
+
+    report = write_tournament_report(tournament_name=t, logs_root=logs_root, posts_root=posts_root)
+    assert report["feedback_package_variant"] == "codeclash_v4"
+    summary = report["feedback_replay_summary"]
+    assert summary["replay_source_counts"]["pommerman_record_json_dir"] == 1
+    assert summary["full_board_replay_true"] == 1
+    assert summary["official_record_present"] == 1
+    round1 = report["rounds"][0]
+    assert round1["feedback_packages"]["agents_with_package"] == 1
+    assert round1["feedback_packages"]["expected_agents_with_package"] == 1
 
 
 def test_tournament_report_loads_stratum_from_model_config(tmp_path, monkeypatch):

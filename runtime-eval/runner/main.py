@@ -933,11 +933,11 @@ def _run_openclaw_adaptive_smoke_tournament(
     feedback_visibility = str(tournament.get("feedback_visibility", "own_matches_plus_public_scoreboard") or "").strip()
     if not feedback_visibility:
         feedback_visibility = "own_matches_plus_public_scoreboard"
-    if feedback_package_variant and feedback_package_variant != "codeclash_v3":
+    if feedback_package_variant and feedback_package_variant not in {"codeclash_v3", "codeclash_v4"}:
         raise ValueError(
-            f"unsupported feedback_package_variant={feedback_package_variant}; expected 'codeclash_v3' or unset"
+            f"unsupported feedback_package_variant={feedback_package_variant}; expected 'codeclash_v3', 'codeclash_v4', or unset"
         )
-    if feedback_package_variant == "codeclash_v3" and feedback_visibility != "own_matches_plus_public_scoreboard":
+    if feedback_package_variant in {"codeclash_v3", "codeclash_v4"} and feedback_visibility != "own_matches_plus_public_scoreboard":
         raise ValueError(
             f"unsupported feedback_visibility={feedback_visibility}; expected 'own_matches_plus_public_scoreboard'"
         )
@@ -1311,6 +1311,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "metadata_path": str(match_dir / "metadata.json"),
                 "scorecard_path": str(sc_path),
                 "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
+                "official_record_json_match_a_path": str(match_dir / "official_record_json_match_a" / "game_state.json"),
                 "schedule_mode": "double_round_robin",
                 "match_legs": "single",
             }
@@ -1338,6 +1339,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                     "metadata_path": str(match_dir / "metadata.json"),
                     "scorecard_path": str(sc_path),
                     "arena_result_match_a_path": str(match_dir / "arena_result_match_a.json"),
+                    "official_record_json_match_a_path": str(match_dir / "official_record_json_match_a" / "game_state.json"),
                     "schedule_mode": "double_round_robin",
                     "match_legs": "single",
                 }
@@ -1404,10 +1406,10 @@ def _run_openclaw_adaptive_smoke_tournament(
                     }
                 )
 
-            # Feedback Package v3 must exist for both participants of every match. Generate
+            # Feedback packages must exist for both participants of every match. Generate
             # all packages for the round *before* invoking OpenClaw so partial revision
             # failures cannot leave the tournament with incomplete feedback coverage.
-            if feedback_package_variant == "codeclash_v3" and round_match_records_for_feedback:
+            if feedback_package_variant in {"codeclash_v3", "codeclash_v4"} and round_match_records_for_feedback:
                 try:
                     from runner.core.pommerman_feedback_package import stage_feedback_packages_for_round
 
@@ -1417,6 +1419,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                         agent_ids=agent_ids,
                         round_match_records=round_match_records_for_feedback,
                         feedback_visibility=feedback_visibility or "own_matches_plus_public_scoreboard",
+                        feedback_package_variant=feedback_package_variant,
                     )
                 except Exception:
                     # Fail-open: feedback packages are audited separately and should not

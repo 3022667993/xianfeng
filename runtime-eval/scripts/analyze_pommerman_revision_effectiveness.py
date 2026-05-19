@@ -202,16 +202,36 @@ def _count_gz_jsonl_rows(path: Path) -> int:
     return count
 
 
-def _feedback_package_metrics(*, tournament_name: str, agent_id: str, round_idx: int) -> tuple[str, str, str, str]:
+def _count_jsonl_rows(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+
+def _feedback_package_metrics(*, tournament_name: str, agent_id: str, round_idx: int) -> tuple[str, str, str, str, str, str, str]:
     root = Path("workspace/posts") / tournament_name / agent_id / f"codebase_post_{round_idx}" / "feedback" / f"round_{round_idx}"
     if not root.exists():
-        return "False", "0", "0", "n/a"
+        return "False", "0", "0", "n/a", "n/a", "n/a", "n/a"
+    manifest = {}
+    manifest_path = root / "package_manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = _load_json(manifest_path)
+        except Exception:
+            manifest = {}
     matches_dir = root / "matches"
     match_dirs = sorted(p for p in matches_dir.iterdir() if p.is_dir()) if matches_dir.exists() else []
     replay_rows_total = 0
-    for md in match_dirs:
-        replay_rows_total += _count_gz_jsonl_rows(md / "replay_match_a.jsonl.gz")
-        replay_rows_total += _count_gz_jsonl_rows(md / "replay_match_b.jsonl.gz")
+    official_record_present = 0
+    if manifest.get("schema_version") == "pommerman_feedback_package_v4":
+        for md in match_dirs:
+            replay_rows_total += _count_jsonl_rows(md / "actions.jsonl")
+            if (md / "official_record_json" / "game_state.json").exists():
+                official_record_present += 1
+    else:
+        for md in match_dirs:
+            replay_rows_total += _count_gz_jsonl_rows(md / "replay_match_a.jsonl.gz")
+            replay_rows_total += _count_jsonl_rows(md / "match_replay.jsonl")
     checksums_path = root / "checksums.json"
     checksum_ok = "n/a"
     if checksums_path.exists():
@@ -233,7 +253,15 @@ def _feedback_package_metrics(*, tournament_name: str, agent_id: str, round_idx:
             checksum_ok = "True" if ok else "False"
         except Exception:
             checksum_ok = "False"
-    return "True", str(len(match_dirs)), str(replay_rows_total), checksum_ok
+    return (
+        "True",
+        str(len(match_dirs)),
+        str(replay_rows_total),
+        checksum_ok,
+        str(manifest.get("replay_source", "n/a")),
+        str(manifest.get("full_board_replay", "n/a")),
+        str(official_record_present),
+    )
 
 
 def main() -> int:
@@ -278,6 +306,9 @@ def main() -> int:
         "replay_package_match_count",
         "replay_rows_total",
         "checksum_ok",
+        "replay_source",
+        "full_board_replay",
+        "official_record_present",
         "tournament_report_path",
     ]
 
@@ -300,10 +331,18 @@ def main() -> int:
                 continue
             aid = str(a.get("agent_id"))
             init = init_lookup.get(aid, {})
-            fp_present, fp_match_count, fp_replay_rows_total, fp_checksum_ok = (
+            (
+                fp_present,
+                fp_match_count,
+                fp_replay_rows_total,
+                fp_checksum_ok,
+                fp_replay_source,
+                fp_full_board_replay,
+                fp_official_record_present,
+            ) = (
                 _feedback_package_metrics(tournament_name=tournament_name, agent_id=aid, round_idx=round_idx)
                 if isinstance(tournament_name, str) and tournament_name
-                else ("n/a", "n/a", "n/a", "n/a")
+                else ("n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a")
             )
             rows.append(
                 [
@@ -332,6 +371,9 @@ def main() -> int:
                     fp_match_count,
                     fp_replay_rows_total,
                     fp_checksum_ok,
+                    fp_replay_source,
+                    fp_full_board_replay,
+                    fp_official_record_present,
                     tournament_report_path,
                 ]
             )

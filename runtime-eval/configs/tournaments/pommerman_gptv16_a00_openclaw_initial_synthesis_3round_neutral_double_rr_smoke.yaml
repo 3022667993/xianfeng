@@ -30,7 +30,7 @@ revision_retry_on_timeout: 1
 
 initial_synthesis_prompt_variant: neutral
 revision_prompt_variant: neutral
-feedback_package_variant: codeclash_v3
+feedback_package_variant: codeclash_v4
 feedback_visibility: own_matches_plus_public_scoreboard
 schedule_mode: double_round_robin
 match_legs: single

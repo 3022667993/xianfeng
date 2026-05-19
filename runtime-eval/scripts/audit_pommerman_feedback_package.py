@@ -36,6 +36,38 @@ NEUTRAL_README_FORBIDDEN_TACTICS = [
     "safe aggression",
 ]
 
+V4_README_FORBIDDEN = [
+    "starter_repos",
+    "match_b",
+    "both legs",
+    "paired legs",
+    "seat-swap legs",
+    *NEUTRAL_README_FORBIDDEN_TACTICS,
+]
+
+V4_PRIVACY_TOKENS = [
+    "provider_route_status",
+    "actual_provider",
+    "actual_model",
+    "fallback_used",
+    "requested_provider_model",
+    "openclaw_default_missing_placeholders",
+    "effective_submission_changed",
+    "effective_revision",
+    "route_provenance",
+    "/root/autodl-tmp/runtime-eval/workspace/",
+    "/root/.openclaw/",
+    "openclaw_workspaces/minimal/runtime_eval_runs",
+    "workspace/codebases",
+    "workspace/posts",
+    "workspace/submissions",
+    "codebase_play_",
+    "codebase_post_",
+    "diff_path",
+    "revision_audit.json",
+    "match_b",
+]
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -123,6 +155,210 @@ def _infer_agent_ids_from_round_manifest(round_manifest: dict[str, Any]) -> list
             if isinstance(v, str) and v.strip():
                 ids.add(v.strip())
     return sorted(ids)
+
+
+def _text_contains_forbidden(path: Path, tokens: list[str]) -> list[str]:
+    try:
+        text = path.read_text(encoding="utf-8").lower()
+    except Exception:
+        return []
+    return [token for token in tokens if token in text]
+
+
+def _audit_v4_package(
+    *,
+    package_root: Path,
+    agent_id: str,
+    round_idx: int,
+    match_by_id: dict[str, dict[str, Any]],
+    round_dir: Path,
+) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    readme_path = package_root / "README.md"
+    scoreboard_path = package_root / "public_scoreboard.json"
+    manifest_path = package_root / "package_manifest.json"
+
+    for req in [readme_path, scoreboard_path, manifest_path]:
+        if not req.exists():
+            errors.append(f"{package_root}: missing required file {req.name}")
+    if not manifest_path.exists():
+        return errors, warnings
+
+    manifest = _load_json(manifest_path)
+    if manifest.get("schema_version") != "pommerman_feedback_package_v4":
+        errors.append(f"{manifest_path}: schema_version mismatch")
+    if int(manifest.get("round", -1) or -1) != int(round_idx):
+        errors.append(f"{manifest_path}: round mismatch")
+    if manifest.get("agent_id") != agent_id:
+        errors.append(f"{manifest_path}: agent_id mismatch")
+    if manifest.get("visibility") != "own_matches_plus_public_scoreboard":
+        errors.append(f"{manifest_path}: visibility mismatch")
+    if manifest.get("schedule_mode") != "double_round_robin":
+        errors.append(f"{manifest_path}: schedule_mode must be double_round_robin")
+    if manifest.get("match_legs") != "single":
+        errors.append(f"{manifest_path}: match_legs must be single")
+    if manifest.get("contains_private_opponent_code") is not False:
+        errors.append(f"{manifest_path}: contains_private_opponent_code must be false")
+
+    replay_source = manifest.get("replay_source")
+    if replay_source not in {"pommerman_record_json_dir", "compact_trajectory_fallback"}:
+        errors.append(f"{manifest_path}: invalid replay_source")
+    full_board_replay = manifest.get("full_board_replay")
+    if replay_source == "pommerman_record_json_dir" and full_board_replay is not True:
+        errors.append(f"{manifest_path}: pommerman_record_json_dir requires full_board_replay=true")
+    if replay_source == "compact_trajectory_fallback" and full_board_replay is not False:
+        errors.append(f"{manifest_path}: compact_trajectory_fallback requires full_board_replay=false")
+
+    if readme_path.exists():
+        text = readme_path.read_text(encoding="utf-8")
+        if "../../README.md" not in text:
+            errors.append(f"{readme_path}: must reference ../../README.md")
+        for token in V4_README_FORBIDDEN:
+            if token in text.lower():
+                errors.append(f"{readme_path}: contains forbidden v4 README token: {token}")
+
+    if scoreboard_path.exists():
+        scoreboard_text = scoreboard_path.read_text(encoding="utf-8")
+        lower = scoreboard_text.lower()
+        for token in V4_PRIVACY_TOKENS:
+            if token in lower:
+                errors.append(f"{scoreboard_path}: contains forbidden token: {token}")
+        scoreboard = json.loads(scoreboard_text)
+        if scoreboard.get("schema_version") != "pommerman_public_scoreboard_v4":
+            errors.append(f"{scoreboard_path}: schema_version mismatch")
+        if scoreboard.get("schedule_mode") != "double_round_robin":
+            errors.append(f"{scoreboard_path}: schedule_mode mismatch")
+        if scoreboard.get("match_legs") != "single":
+            errors.append(f"{scoreboard_path}: match_legs mismatch")
+        sc_matches = scoreboard.get("matches")
+        if not isinstance(sc_matches, list):
+            errors.append(f"{scoreboard_path}: matches must be a list")
+        elif len(sc_matches) != len(match_by_id):
+            errors.append(f"{scoreboard_path}: expected {len(match_by_id)} matches, found {len(sc_matches)}")
+
+    expected_own_matches = [
+        m
+        for m in match_by_id.values()
+        if agent_id in {m.get("left_agent_id"), m.get("right_agent_id")}
+    ]
+    own_match_ids = sorted(str(m.get("match_id")) for m in expected_own_matches if isinstance(m.get("match_id"), str))
+    matches_dir = package_root / "matches"
+    if not matches_dir.exists():
+        errors.append(f"{package_root}: missing matches/ directory")
+        return errors, warnings
+    present_match_dirs = sorted(p.name for p in matches_dir.iterdir() if p.is_dir())
+    extra = sorted(set(present_match_dirs) - set(own_match_ids))
+    if extra:
+        errors.append(f"{matches_dir}: contains non-own match directories: {extra}")
+
+    manifest_matches = manifest.get("matches")
+    if not isinstance(manifest_matches, list):
+        errors.append(f"{manifest_path}: matches must be a list")
+        manifest_matches = []
+    expected_manifest_matches = [f"matches/{mid}/match_index.json" for mid in own_match_ids]
+    if sorted(manifest_matches) != sorted(expected_manifest_matches):
+        errors.append(f"{manifest_path}: matches list mismatch")
+
+    any_missing_official = False
+    for mid in own_match_ids:
+        match_pkg = matches_dir / mid
+        if not match_pkg.exists():
+            errors.append(f"{matches_dir}: missing match directory {mid}")
+            continue
+        match_index_path = match_pkg / "match_index.json"
+        actions_path = match_pkg / "actions.jsonl"
+        run_logs_path = match_pkg / "run_logs.txt"
+        official_path = match_pkg / "official_record_json" / "game_state.json"
+        for req in [match_index_path, actions_path, run_logs_path]:
+            if not req.exists():
+                errors.append(f"{match_pkg}: missing {req.name}")
+        if not official_path.exists():
+            any_missing_official = True
+
+        match_rec = match_by_id.get(mid, {})
+        match_idx = int(match_rec.get("match_idx", -1) or -1)
+        source_match_dir = round_dir / f"match_{match_idx}" if match_idx > 0 else None
+        metadata = None
+        arena_a = None
+        if source_match_dir is not None and source_match_dir.exists():
+            if (source_match_dir / "metadata.json").exists():
+                metadata = _load_json(source_match_dir / "metadata.json")
+            if (source_match_dir / "arena_result_match_a.json").exists():
+                arena_a = _load_json(source_match_dir / "arena_result_match_a.json")
+
+        if match_index_path.exists():
+            index_text = match_index_path.read_text(encoding="utf-8")
+            if "match_b" in index_text.lower():
+                errors.append(f"{match_index_path}: contains match_b")
+            match_index = json.loads(index_text)
+            if match_index.get("schema_version") != "pommerman_match_index_v4":
+                errors.append(f"{match_index_path}: schema_version mismatch")
+            if match_index.get("schedule_mode") != "double_round_robin":
+                errors.append(f"{match_index_path}: schedule_mode mismatch")
+            if match_index.get("match_legs") != "single":
+                errors.append(f"{match_index_path}: match_legs mismatch")
+            if match_index.get("seat_swap") is not False:
+                errors.append(f"{match_index_path}: seat_swap must be false")
+            if "legs" in match_index:
+                errors.append(f"{match_index_path}: must not use paired legs schema")
+            game = match_index.get("game")
+            if not isinstance(game, dict):
+                errors.append(f"{match_index_path}: missing game object")
+                game = {}
+            if game.get("internal_leg_id") != "match_a":
+                errors.append(f"{match_index_path}: internal_leg_id must be match_a")
+            if match_index.get("agent_id") != agent_id:
+                errors.append(f"{match_index_path}: agent_id mismatch")
+            if match_index.get("match_id") != mid:
+                errors.append(f"{match_index_path}: match_id mismatch")
+            if isinstance(metadata, dict):
+                if match_index.get("requested_seed") != metadata.get("requested_seed"):
+                    errors.append(f"{match_index_path}: requested_seed mismatch vs metadata")
+                if match_index.get("applied_seed") != metadata.get("applied_seed"):
+                    errors.append(f"{match_index_path}: applied_seed mismatch vs metadata")
+            if isinstance(arena_a, dict):
+                if game.get("winner") != arena_a.get("left_right_winner"):
+                    errors.append(f"{match_index_path}: winner mismatch vs arena")
+                if game.get("steps") != arena_a.get("steps"):
+                    errors.append(f"{match_index_path}: steps mismatch vs arena")
+                if game.get("reward") != arena_a.get("reward"):
+                    errors.append(f"{match_index_path}: reward mismatch vs arena")
+
+        if actions_path.exists():
+            rows = [payload for _line_no, payload in _iter_jsonl(actions_path)]
+            for row in rows:
+                if row.get("schema_version") != "pommerman_actions_v1":
+                    errors.append(f"{actions_path}: schema_version mismatch")
+                    break
+                if row.get("internal_leg_id") != "match_a":
+                    errors.append(f"{actions_path}: internal_leg_id must be match_a")
+                    break
+                if "agent_action" not in row or "opponent_action" not in row:
+                    errors.append(f"{actions_path}: missing agent_action/opponent_action")
+                    break
+                if "match_b" in json.dumps(row).lower():
+                    errors.append(f"{actions_path}: contains match_b")
+                    break
+
+    if full_board_replay is True and any_missing_official:
+        errors.append(f"{manifest_path}: full_board_replay=true but game_state.json is missing")
+    if replay_source == "pommerman_record_json_dir" and any_missing_official:
+        errors.append(f"{manifest_path}: official replay source selected but game_state.json is missing")
+
+    for p in sorted(x for x in package_root.rglob("*") if x.is_file()):
+        if p.suffix in {".log"}:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8").lower()
+        except Exception:
+            continue
+        for token in V4_PRIVACY_TOKENS:
+            if token in text:
+                errors.append(f"{p}: contains forbidden token: {token}")
+
+    return errors, warnings
 
 
 def audit_feedback_package(
@@ -228,6 +464,25 @@ def audit_feedback_package(
             for forbidden in FORBIDDEN_FILENAMES:
                 if (package_root / forbidden).exists():
                     errors.append(f"{package_root}: forbidden file present: {forbidden}")
+
+            package_manifest_path = package_root / "package_manifest.json"
+            if package_manifest_path.exists():
+                try:
+                    package_manifest = _load_json(package_manifest_path)
+                except Exception as exc:
+                    errors.append(f"{package_manifest_path}: failed to parse json: {exc!r}")
+                    package_manifest = {}
+                if package_manifest.get("schema_version") == "pommerman_feedback_package_v4":
+                    e4, w4 = _audit_v4_package(
+                        package_root=package_root,
+                        agent_id=agent_id,
+                        round_idx=round_idx,
+                        match_by_id=match_by_id,
+                        round_dir=rd,
+                    )
+                    errors.extend(e4)
+                    warnings.extend(w4)
+                    continue
 
             readme_path = package_root / "README.md"
             round_summary_path = package_root / "round_summary.json"
