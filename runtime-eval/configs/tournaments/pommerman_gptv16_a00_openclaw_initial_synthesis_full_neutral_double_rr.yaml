@@ -1,9 +1,9 @@
-name: pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_double_rr_smoke
+name: pommerman_gptv16_a00_openclaw_initial_synthesis_full_neutral_double_rr
 game: pommerman_1v1
 regime: A00
 
 num_models: auto
-num_rounds: 3
+num_rounds: auto_full_double_rr
 matches_per_round: auto
 independent_tournaments: 1
 

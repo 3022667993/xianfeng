@@ -393,7 +393,22 @@ def audit_feedback_package(
     require_all_agents_revised = bool(cfg.get("require_all_agents_revised", False))
     revision_rounds_raw = cfg.get("revision_rounds", [])
     revision_rounds: set[int] = set()
-    if isinstance(revision_rounds_raw, list):
+    if revision_rounds_raw == "auto_before_final":
+        raw_num_rounds = cfg.get("num_rounds", 0)
+        if raw_num_rounds == "auto_full_double_rr":
+            observed_rounds = [
+                int(p.name.split("_", 1)[1])
+                for p in logs_root.glob("round_*")
+                if p.is_dir() and p.name.split("_", 1)[1].isdigit()
+            ]
+            num_rounds = max(observed_rounds) if observed_rounds else 0
+        else:
+            try:
+                num_rounds = int(raw_num_rounds or 0)
+            except Exception:
+                num_rounds = 0
+        revision_rounds = set(range(1, num_rounds))
+    elif isinstance(revision_rounds_raw, list):
         for r in revision_rounds_raw:
             try:
                 revision_rounds.add(int(r))

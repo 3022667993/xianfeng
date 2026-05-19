@@ -137,9 +137,9 @@ def test_default_roster_audit_script_passes(tmp_path):
     assert "formal_schedule_audit=PASS" in proc.stdout
 
 
-def test_deepseek_glm_roster_build_and_audit_passes(tmp_path):
+def test_current_roster_build_and_audit_passes(tmp_path):
     repo = Path(__file__).resolve().parents[1]
-    manifest = tmp_path / "manifest_dsglm.json"
+    manifest = tmp_path / "manifest_current.json"
     proc = subprocess.run(
         [
             "python",
@@ -147,7 +147,7 @@ def test_deepseek_glm_roster_build_and_audit_passes(tmp_path):
             "--manifest",
             str(manifest),
             "--models",
-            "configs/models/openclaw_relay_6model_deepseek_glm.yaml",
+            "configs/models/openclaw_relay_current.yaml",
         ],
         cwd=repo,
         capture_output=True,
@@ -158,18 +158,9 @@ def test_deepseek_glm_roster_build_and_audit_passes(tmp_path):
     assert "formal_schedule_audit=PASS" in proc.stdout
 
     data = json.loads(manifest.read_text(encoding="utf-8"))
-    got = sorted([m["agent_id"] for m in data["models"]])
-    expected = sorted(
-        [
-            "relay_bailian_deepseek_v4_flash",
-            "relay_gemini_2_5_flash_thinking",
-            "relay_deepseek_v3",
-            "relay_qwen3_5_plus",
-            "relay_glm_4_6",
-            "relay_glm_4_7",
-        ]
-    )
-    assert got == expected
+    got = [m["agent_id"] for m in data["models"]]
+    assert len(got) == 6
+    assert len(set(got)) == 6
 
     cycle1 = []
     cycle2 = []

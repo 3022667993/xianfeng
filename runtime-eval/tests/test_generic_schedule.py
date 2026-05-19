@@ -1,6 +1,7 @@
 import pytest
 
 from runner.core.schedule import build_double_round_robin
+from runner.core.config import ODD_MODEL_COUNT_ERROR
 
 
 def _ids(n: int) -> list[str]:
@@ -43,5 +44,5 @@ def test_prefix_schedule_marks_incomplete():
 
 
 def test_odd_agents_rejected():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=ODD_MODEL_COUNT_ERROR):
         build_double_round_robin(_ids(13))

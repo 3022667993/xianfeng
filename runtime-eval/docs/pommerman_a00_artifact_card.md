@@ -11,10 +11,12 @@
 ## Current Configs
 - Current 3-round prefix smoke:
   - `configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_3round_neutral_double_rr_smoke.yaml`
-- Future 10-round formal run:
-  - `configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_10round_neutral_double_rr.yaml`
+- Preferred full formal run:
+  - `configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_full_neutral_double_rr.yaml`
 - Current model roster:
-  - `configs/models/openclaw_relay_6model_deepseek_glm.yaml`
+  - `configs/models/openclaw_relay_current.yaml`
+- To replace the active roster, edit only entries in `configs/models/openclaw_relay_current.yaml`.
+- Active auto configs support even `N`; odd `N` requires BYE scheduling, which is not implemented.
 
 ## Current Artifact Contract
 - Per match:

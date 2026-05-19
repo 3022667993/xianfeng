@@ -5,6 +5,10 @@ import json
 import math
 import subprocess
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from runner.core.config import ODD_MODEL_COUNT_ERROR
 
 
 def _load_json(path: Path) -> dict:
@@ -49,7 +53,7 @@ def audit_manifest(path: Path) -> tuple[list[str], list[str]]:
     if len(set(model_ids)) != n:
         errors.append("model ids must be unique")
     if n % 2 == 1:
-        errors.append("double_round_robin requires an even number of agents")
+        errors.append(ODD_MODEL_COUNT_ERROR)
 
     expected_matches_per_round = n // 2
     expected_full_rounds = 2 * (n - 1)
@@ -160,10 +164,10 @@ def audit_manifest(path: Path) -> tuple[list[str], list[str]]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", default="logs/pommerman_formal_schedule_manifest.json")
-    parser.add_argument("--models", default="configs/models/openclaw_relay_6model_gptv16.yaml")
+    parser.add_argument("--models", default="configs/models/openclaw_relay_current.yaml")
     parser.add_argument(
         "--tournament",
-        default="configs/tournaments/pommerman_gptv16_a00_6model_schedule_smoke.yaml",
+        default="configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_full_neutral_double_rr.yaml",
     )
     args = parser.parse_args()
 

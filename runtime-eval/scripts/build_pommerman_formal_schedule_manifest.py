@@ -10,6 +10,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from runner.core.schedule import build_double_round_robin
+from runner.core.config import ODD_MODEL_COUNT_ERROR, resolve_tournament_counts
 
 
 def _load_yaml(path: Path) -> dict:
@@ -27,7 +28,8 @@ def build_manifest(models_cfg: dict, tournament_cfg: dict) -> dict:
     if not isinstance(models, list) or len(models) < 2:
         raise ValueError("formal schedule requires at least 2 models")
     if len(models) % 2 == 1:
-        raise ValueError("double_round_robin requires an even number of agents; BYE scheduling is not implemented yet.")
+        raise ValueError(ODD_MODEL_COUNT_ERROR)
+    tournament_cfg = resolve_tournament_counts(tournament_cfg, models)
 
     model_entries: list[dict] = []
     for idx, m in enumerate(models, start=1):
@@ -159,10 +161,10 @@ def build_manifest(models_cfg: dict, tournament_cfg: dict) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--models", default="configs/models/openclaw_relay_6model_gptv16.yaml")
+    parser.add_argument("--models", default="configs/models/openclaw_relay_current.yaml")
     parser.add_argument(
         "--tournament",
-        default="configs/tournaments/pommerman_gptv16_a00_6model_schedule_smoke.yaml",
+        default="configs/tournaments/pommerman_gptv16_a00_openclaw_initial_synthesis_full_neutral_double_rr.yaml",
     )
     parser.add_argument("--output", default="logs/pommerman_formal_schedule_manifest.json")
     args = parser.parse_args()

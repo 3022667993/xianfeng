@@ -36,9 +36,10 @@ def audit_pommerman_initial_synthesis(
         return errors, warnings
     payload = _load_json(manifest_path)
     agents = payload.get("agents")
-    if not isinstance(agents, list) or len(agents) != 6:
-        errors.append("initial_synthesis_manifest must include exactly 6 agent entries")
+    if not isinstance(agents, list) or len(agents) < 2:
+        errors.append("initial_synthesis_manifest must include at least 2 agent entries")
         return errors, warnings
+    expected_agent_count = len(agents)
 
     initial_hashes: list[str] = []
     agent_ids: list[str] = []
@@ -87,7 +88,7 @@ def audit_pommerman_initial_synthesis(
         if isinstance(initial_sha, str):
             initial_hashes.append(initial_sha)
 
-    if len(set(agent_ids)) != 6:
+    if len(set(agent_ids)) != expected_agent_count:
         errors.append("initial_synthesis_manifest agent ids must be unique and complete")
 
     prop_path = Path("logs/round_1/initial_propagation_manifest.json")
@@ -96,8 +97,8 @@ def audit_pommerman_initial_synthesis(
         return errors, warnings
     prop = _load_json(prop_path)
     entries = prop.get("agents")
-    if not isinstance(entries, list) or len(entries) != 6:
-        errors.append("initial_propagation_manifest must include exactly 6 entries")
+    if not isinstance(entries, list) or len(entries) != expected_agent_count:
+        errors.append(f"initial_propagation_manifest must include exactly {expected_agent_count} entries")
         return errors, warnings
 
     prop_ids = set()

@@ -1,0 +1,36 @@
+models:
+  - id: relay_bailian_deepseek_v4_flash
+    agent_id: relay_bailian_deepseek_v4_flash
+    provider_model: relay/bailian/deepseek-v4-flash
+    executor: openclaw-minimal
+    stratum: light
+
+  - id: relay_gemini_2_5_flash_thinking
+    agent_id: relay_gemini_2_5_flash_thinking
+    provider_model: relay/gemini-2.5-flash-thinking
+    executor: openclaw-minimal
+    stratum: mid
+
+  - id: relay_deepseek_v3
+    agent_id: relay_deepseek_v3
+    provider_model: relay/deepseek-ai/DeepSeek-V3.2
+    executor: openclaw-minimal
+    stratum: strong
+
+  - id: relay_qwen3_5_plus
+    agent_id: relay_qwen3_5_plus
+    provider_model: relay/qwen3.5-plus
+    executor: openclaw-minimal
+    stratum: light
+
+  - id: relay_glm_4_6
+    agent_id: relay_glm_4_6
+    provider_model: glm-4.6
+    executor: openclaw-minimal
+    stratum: mid
+
+  - id: relay_glm_4_7
+    agent_id: relay_glm_4_7
+    provider_model: glm-4.7
+    executor: openclaw-minimal
+    stratum: strong

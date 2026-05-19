@@ -9,7 +9,7 @@ from pathlib import Path
 
 from runner.adapters.registry import get_adapter
 from runner.core.artifacts import ensure_round_dir, write_json
-from runner.core.config import load_yaml, require_keys
+from runner.core.config import load_yaml, require_keys, resolve_tournament_counts
 from runner.core.fsops import copy_tree
 from runner.core.pommerman_results import classify_pommerman_result
 from runner.core.revision import apply_minimal_initial_synthesis, apply_minimal_revision, apply_noop_revision, write_diff_patch
@@ -208,8 +208,12 @@ def _execution_smoke_base_seed(tournament: dict) -> int:
 
 
 def _execution_smoke_round_robin_round(entries: list[dict]) -> list[tuple[dict, dict]]:
-    if len(entries) != 6:
-        return []
+    if len(entries) < 2:
+        raise ValueError("execution_smoke requires at least 2 models")
+    if len(entries) % 2 == 1:
+        from runner.core.config import ODD_MODEL_COUNT_ERROR
+
+        raise ValueError(ODD_MODEL_COUNT_ERROR)
     order = list(entries)
     half = len(order) // 2
     left_half = order[:half]
@@ -409,48 +413,58 @@ def _roster_entries(roster_models: list[dict]) -> list[dict]:
                 "agent_id": agent_id,
                 "provider_model": entry.get("provider_model"),
                 "executor": entry.get("executor"),
+                "stratum": entry.get("stratum"),
             }
         )
     return entries
 
 
-def _initial_strategy_profiles() -> dict[str, tuple[str, str]]:
-    return {
-        "relay_bailian_deepseek_v4_flash": (
-            "cautious_center_explore",
-            "Prioritize cautious survival and controlled center exploration while avoiding unnecessary bomb risk.",
+def _initial_strategy_profiles() -> list[tuple[str, str]]:
+    return [
+        (
+            "valid_action_survival",
+            "Preserve valid actions, defensive parsing, and survival-oriented behavior while making purposeful decisions.",
         ),
-        "relay_gemini_2_5_flash_thinking": (
-            "powerup_wood_clear",
-            "Prioritize safe powerup collection and purposeful wood clearing with deterministic movement choices.",
+        (
+            "mobility_preservation",
+            "Prioritize movement choices that preserve future options and avoid avoidable self-destruction.",
         ),
-        "relay_deepseek_v3": (
-            "tactical_safe_bombing",
-            "Use tactical bombing to create advantage, but only when an explicit safe escape path exists.",
+        (
+            "escape_route_awareness",
+            "Prioritize actions that maintain escape routes and avoid becoming trapped by hazards.",
         ),
-        "relay_qwen3_5_plus": (
-            "safe_opponent_pressure",
-            "Apply opponent pressure when safe by reducing distance and contesting space without reckless commits.",
+        (
+            "measured_bomb_usage",
+            "Use available actions proactively only when basic escape and validity safeguards remain intact.",
         ),
-        "relay_glm_4_6": (
-            "mobility_deadend_avoidance",
-            "Maximize mobility and avoid dead ends, preferring routes that preserve multiple escape options.",
+        (
+            "space_control_balance",
+            "Balance survival with purposeful board-position changes without relying on hidden state.",
         ),
-        "relay_glm_4_7": (
-            "balanced_aggressive_control",
-            "Balance survivability with proactive board control using measured aggression and safe tempo.",
+        (
+            "robust_observation_handling",
+            "Handle partial observations defensively while making non-passive valid action choices.",
         ),
-    }
+    ]
 
 
-def _get_initial_strategy_profile(agent_id: str) -> tuple[str, str]:
+def _assign_initial_strategy_profiles(roster_entries: list[dict]) -> dict[str, tuple[str, str]]:
     profiles = _initial_strategy_profiles()
-    if agent_id in profiles:
-        return profiles[agent_id]
-    return (
-        "balanced_default",
-        "Balanced deterministic strategy with survival priority and safe proactive movement.",
-    )
+    assignments: dict[str, tuple[str, str]] = {}
+    for idx, entry in enumerate(roster_entries):
+        agent_id = entry.get("agent_id") if isinstance(entry, dict) else None
+        if not isinstance(agent_id, str) or not agent_id:
+            continue
+        assignments[agent_id] = profiles[idx % len(profiles)]
+    return assignments
+
+
+def _get_initial_strategy_profile(agent_id: str, profile_assignments: dict[str, tuple[str, str]] | None = None) -> tuple[str, str]:
+    if profile_assignments and agent_id in profile_assignments:
+        return profile_assignments[agent_id]
+    profiles = _initial_strategy_profiles()
+    idx = int(hashlib.sha256(agent_id.encode("utf-8")).hexdigest()[:8], 16) % len(profiles)
+    return profiles[idx]
 
 
 def _run_execution_smoke_tournament(
@@ -654,7 +668,7 @@ def _run_execution_smoke_tournament(
 
     round_manifest_payload = {
         "round_idx": 1,
-        "matches_per_round": 3,
+        "matches_per_round": len(round_manifest_matches),
         "matches": round_manifest_matches,
         "execution_smoke": True,
         "background_agents": ["dummy2", "dummy3"],
@@ -681,7 +695,7 @@ def _run_adaptive_dryrun_tournament(
     entries = _roster_entries(roster_models)
     agent_ids = [e["agent_id"] for e in entries]
     model_by_agent = {e["agent_id"]: e for e in entries}
-    schedule = build_double_round_robin(agent_ids)
+    schedule = build_double_round_robin(agent_ids, num_rounds=int(tournament.get("num_rounds", 0) or 0))
 
     latest_post_by_agent: dict[str, Path] = {}
     for round_info in schedule["rounds"]:
@@ -879,8 +893,8 @@ def _run_openclaw_adaptive_smoke_tournament(
     tournament_name = tournament["name"]
     _cleanup_tournament_state(tournament_name)
     num_rounds = int(tournament.get("num_rounds", 0) or 0)
-    if num_rounds not in {2, 3}:
-        raise ValueError("openclaw_adaptive_smoke supports num_rounds in {2, 3}")
+    if num_rounds < 2:
+        raise ValueError("openclaw_adaptive_smoke requires num_rounds >= 2")
     revision_rounds_raw = tournament.get("revision_rounds", [1])
     if not isinstance(revision_rounds_raw, list):
         raise ValueError("openclaw_adaptive_smoke requires revision_rounds as a list")
@@ -900,6 +914,7 @@ def _run_openclaw_adaptive_smoke_tournament(
     entries = _roster_entries(roster_models)
     agent_ids = [e["agent_id"] for e in entries]
     model_by_agent = {e["agent_id"]: e for e in entries}
+    profile_assignments = _assign_initial_strategy_profiles(entries)
     schedule = build_double_round_robin(agent_ids, num_rounds=num_rounds)
     rounds = schedule["rounds"][:num_rounds]
     base_seed = _execution_smoke_base_seed(tournament)
@@ -966,7 +981,7 @@ def _run_openclaw_adaptive_smoke_tournament(
             play_1 = Path("workspace/codebases") / tournament_name / agent_id / "codebase_play_1"
             initial_diff_path = Path("logs") / f"initial_synthesis_{agent_id}.diff.patch"
             copy_tree(starter_repo, initial_base)
-            strategy_profile_id, strategy_profile_text = _get_initial_strategy_profile(agent_id)
+            strategy_profile_id, strategy_profile_text = _get_initial_strategy_profile(agent_id, profile_assignments)
             route_retry_budget = max(
                 initial_synthesis_retry_on_route_unknown,
                 initial_synthesis_retry_on_noop,
@@ -1358,7 +1373,7 @@ def _run_openclaw_adaptive_smoke_tournament(
             round_dir / "round_manifest.json",
             {
                 "round_idx": round_idx,
-                "matches_per_round": 3,
+                "matches_per_round": len(round_matches),
                 "cycle": int(round_info["cycle"]),
                 "openclaw_adaptive_smoke": True,
                 "real_openclaw_revision": True,
@@ -1715,6 +1730,11 @@ def main() -> None:
     tournament = load_yaml(args.tournament)
     models_cfg = load_yaml(args.models) if args.models else {}
     smoke_only = args.models is None
+    roster_models = models_cfg.get("models", []) if isinstance(models_cfg, dict) else []
+    if args.models is not None:
+        tournament = resolve_tournament_counts(tournament, roster_models)
+    else:
+        tournament = resolve_tournament_counts(tournament, None)
 
     require_keys(regime, ["name", "description"], "regime config")
     require_keys(
@@ -1740,7 +1760,6 @@ def main() -> None:
     adaptive_dryrun = bool(tournament.get("adaptive_dryrun", False))
     openclaw_adaptive_smoke = bool(tournament.get("openclaw_adaptive_smoke", False))
 
-    roster_models = models_cfg.get("models", []) if isinstance(models_cfg, dict) else []
     left_model = roster_models[0] if isinstance(roster_models, list) and len(roster_models) > 0 else None
     right_model = roster_models[1] if isinstance(roster_models, list) and len(roster_models) > 1 else None
     left_model_id = left_model.get("id") if isinstance(left_model, dict) else None
@@ -1794,12 +1813,8 @@ def main() -> None:
     if execution_smoke:
         if args.models is None:
             raise ValueError("execution_smoke requires --models")
-        if not isinstance(roster_models, list) or len(roster_models) != 6:
-            raise ValueError("execution_smoke requires exactly 6 models")
         if int(tournament.get("num_rounds", 0)) != 1:
             raise ValueError("execution_smoke requires num_rounds=1")
-        if int(tournament.get("matches_per_round", 0)) != 3:
-            raise ValueError("execution_smoke requires matches_per_round=3")
         _run_execution_smoke_tournament(
             adapter=adapter,
             game_cfg=game_cfg,
@@ -1818,12 +1833,8 @@ def main() -> None:
         if args.models is None:
             raise ValueError("openclaw_adaptive_smoke requires --models")
         rounds_for_adaptive_smoke = int(tournament.get("num_rounds", 0))
-        if rounds_for_adaptive_smoke not in {2, 3}:
-            raise ValueError("openclaw_adaptive_smoke requires num_rounds in {2,3}")
-        if int(tournament.get("matches_per_round", 0)) != 3:
-            raise ValueError("openclaw_adaptive_smoke requires matches_per_round=3")
-        if not isinstance(roster_models, list) or len(roster_models) != 6:
-            raise ValueError("openclaw_adaptive_smoke currently requires exactly 6 models")
+        if rounds_for_adaptive_smoke < 2:
+            raise ValueError("openclaw_adaptive_smoke requires num_rounds >= 2")
         _run_openclaw_adaptive_smoke_tournament(
             adapter=adapter,
             game_cfg=game_cfg,
@@ -1847,12 +1858,6 @@ def main() -> None:
     if adaptive_dryrun:
         if args.models is None:
             raise ValueError("adaptive_dryrun requires --models")
-        if int(tournament.get("num_rounds", 0)) != 10:
-            raise ValueError("adaptive_dryrun requires num_rounds=10")
-        if int(tournament.get("matches_per_round", 0)) != 3:
-            raise ValueError("adaptive_dryrun requires matches_per_round=3")
-        if not isinstance(roster_models, list) or len(roster_models) != 6:
-            raise ValueError("adaptive_dryrun currently requires exactly 6 models")
         _run_adaptive_dryrun_tournament(
             adapter=adapter,
             game_cfg=game_cfg,

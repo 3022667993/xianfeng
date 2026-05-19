@@ -27,6 +27,21 @@ def test_execution_smoke_round_is_perfect_matching():
     assert all(seen.count(x) == 1 for x in set(seen))
 
 
+def test_execution_smoke_round_supports_even_n():
+    entries = _execution_smoke_model_entries(
+        [
+            {"id": f"m{i}", "agent_id": f"a{i}", "executor": "openclaw-minimal"}
+            for i in range(1, 9)
+        ]
+    )
+    pairs = _execution_smoke_round_robin_round(entries)
+    assert len(pairs) == 4
+    seen = []
+    for left, right in pairs:
+        seen.extend([left["agent_id"], right["agent_id"]])
+    assert sorted(seen) == [f"a{i}" for i in range(1, 9)]
+
+
 def _mk_match(round_dir: Path, idx: int, left: str, right: str):
     match_dir = round_dir / f"match_{idx}"
     match_dir.mkdir(parents=True, exist_ok=True)

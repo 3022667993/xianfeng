@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from runner.core.config import ODD_MODEL_COUNT_ERROR
+
 
 BYE_AGENT_ID = "__BYE__"
 
@@ -46,7 +48,7 @@ def build_double_round_robin(agent_ids: list[str], *, num_rounds: int | None = N
     if len(set(agent_ids)) != len(agent_ids):
         raise ValueError("agent ids must be unique")
     if len(agent_ids) % 2 == 1:
-        raise ValueError("double_round_robin requires an even number of agents; BYE scheduling is not implemented yet.")
+        raise ValueError(ODD_MODEL_COUNT_ERROR)
 
     entries = list(agent_ids)
     rounds_per_cycle = len(entries) - 1

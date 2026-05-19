@@ -74,16 +74,45 @@ def _check_seed_applied(payload: dict[str, Any], label: str, errors: list[str]) 
         errors.append(f"{label}: seed_control_env_seed_return missing")
 
 
-def _audit_round_manifest(path: Path, expected_round_idx: int) -> tuple[list[str], set[str]]:
+def _infer_expected_agent_count() -> int:
+    ism = Path("logs/initial_synthesis_manifest.json")
+    if ism.exists():
+        try:
+            agents = _load_json(ism).get("agents", [])
+            if isinstance(agents, list) and agents:
+                return len([a for a in agents if isinstance(a, dict) and isinstance(a.get("agent_id"), str)])
+        except Exception:
+            pass
+    for rm_path in sorted(Path("logs").glob("round_*/round_manifest.json")):
+        try:
+            matches = _load_json(rm_path).get("matches", [])
+        except Exception:
+            continue
+        seen: set[str] = set()
+        if isinstance(matches, list):
+            for m in matches:
+                if not isinstance(m, dict):
+                    continue
+                for key in ["left_agent_id", "right_agent_id"]:
+                    value = m.get(key)
+                    if isinstance(value, str):
+                        seen.add(value)
+        if seen:
+            return len(seen)
+    return 6
+
+
+def _audit_round_manifest(path: Path, expected_round_idx: int, expected_agent_count: int) -> tuple[list[str], set[str]]:
     errors: list[str] = []
     seen_agents: list[str] = []
+    expected_matches_per_round = expected_agent_count // 2
     if not path.exists():
         return [f"missing {path}"], set()
     rm = _load_json(path)
     if rm.get("round_idx") != expected_round_idx:
         errors.append(f"round_{expected_round_idx}: round_idx mismatch")
-    if rm.get("matches_per_round") != 3:
-        errors.append(f"round_{expected_round_idx}: matches_per_round must be 3")
+    if rm.get("matches_per_round") != expected_matches_per_round:
+        errors.append(f"round_{expected_round_idx}: matches_per_round must be {expected_matches_per_round}")
     if rm.get("schedule_mode", "double_round_robin") != "double_round_robin":
         errors.append(f"round_{expected_round_idx}: schedule_mode must be double_round_robin")
     if rm.get("match_legs", "single") != "single":
@@ -91,8 +120,8 @@ def _audit_round_manifest(path: Path, expected_round_idx: int) -> tuple[list[str
     if rm.get("scorecard_policy") != "raw_per_match_scorecard; pair-level aggregation is post-analysis":
         errors.append(f"round_{expected_round_idx}: scorecard policy mismatch")
     matches = rm.get("matches")
-    if not isinstance(matches, list) or len(matches) != 3:
-        errors.append(f"round_{expected_round_idx}: exactly 3 matches required")
+    if not isinstance(matches, list) or len(matches) != expected_matches_per_round:
+        errors.append(f"round_{expected_round_idx}: exactly {expected_matches_per_round} matches required")
         return errors, set(seen_agents)
     for m in matches:
         if not isinstance(m, dict):
@@ -113,20 +142,20 @@ def _audit_round_manifest(path: Path, expected_round_idx: int) -> tuple[list[str
             if not isinstance(path_value, str) or not Path(path_value).exists():
                 errors.append(f"round_{expected_round_idx}: missing artifact {field}")
         _check_seed_applied(m, f"round_{expected_round_idx}/{m.get('match_id')}", errors)
-    if len(seen_agents) != 6 or len(set(seen_agents)) != 6:
-        errors.append(f"round_{expected_round_idx}: must be perfect matching over 6 unique agents")
+    if len(seen_agents) != expected_agent_count or len(set(seen_agents)) != expected_agent_count:
+        errors.append(f"round_{expected_round_idx}: must be perfect matching over {expected_agent_count} unique agents")
     return errors, set(seen_agents)
 
 
-def _audit_revision_manifest(path: Path, label: str) -> list[str]:
+def _audit_revision_manifest(path: Path, label: str, expected_agent_count: int) -> list[str]:
     errors: list[str] = []
     if not path.exists():
         return [f"missing {path}"]
     rev = _load_json(path)
     require_effective = bool(rev.get("require_effective_submission_change", False))
     agents = rev.get("agents")
-    if not isinstance(agents, list) or len(agents) != 6:
-        return [f"{label}: revision_manifest must include exactly 6 entries"]
+    if not isinstance(agents, list) or len(agents) != expected_agent_count:
+        return [f"{label}: revision_manifest must include exactly {expected_agent_count} entries"]
     for agent in agents:
         if not isinstance(agent, dict):
             errors.append(f"{label}: revision entry must be object")
@@ -167,8 +196,8 @@ def _audit_propagation_manifest(
         return [f"missing {path}"]
     payload = _load_json(path)
     entries = payload.get("agents")
-    if not isinstance(entries, list) or len(entries) != 6:
-        return [f"{path}: propagation_manifest must include exactly 6 agents"]
+    if not isinstance(entries, list) or len(entries) != len(expected_agents):
+        return [f"{path}: propagation_manifest must include exactly {len(expected_agents)} agents"]
     by_agent = {e.get("agent_id"): e for e in entries if isinstance(e, dict)}
     if set(by_agent.keys()) != expected_agents:
         errors.append(f"{path}: propagation agents mismatch")
@@ -251,6 +280,7 @@ def audit_pommerman_initial_synthesis_3round_smoke(
 ) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+    expected_agent_count = _infer_expected_agent_count()
 
     e0, w0 = audit_pommerman_initial_synthesis(tournament_name=tournament_name)
     errors.extend(e0)
@@ -282,14 +312,18 @@ def audit_pommerman_initial_synthesis_3round_smoke(
 
     round_agent_sets: list[set[str]] = []
     for round_idx in [1, 2, 3]:
-        e_round, agents = _audit_round_manifest(Path(f"logs/round_{round_idx}/round_manifest.json"), round_idx)
+        e_round, agents = _audit_round_manifest(
+            Path(f"logs/round_{round_idx}/round_manifest.json"),
+            round_idx,
+            expected_agent_count,
+        )
         errors.extend(e_round)
         round_agent_sets.append(agents)
         _audit_match_artifacts(round_idx, errors)
 
     all_agents = set.union(*round_agent_sets) if round_agent_sets else set()
-    if len(all_agents) != 6:
-        errors.append("must observe exactly 6 unique agents")
+    if len(all_agents) != expected_agent_count:
+        errors.append(f"must observe exactly {expected_agent_count} unique agents")
 
     ip_path = Path("logs/round_1/initial_propagation_manifest.json")
     if not ip_path.exists():
@@ -297,8 +331,8 @@ def audit_pommerman_initial_synthesis_3round_smoke(
     else:
         ip = _load_json(ip_path)
         entries = ip.get("agents")
-        if not isinstance(entries, list) or len(entries) != 6:
-            errors.append("initial_propagation_manifest must include exactly 6 entries")
+        if not isinstance(entries, list) or len(entries) != expected_agent_count:
+            errors.append(f"initial_propagation_manifest must include exactly {expected_agent_count} entries")
         else:
             by_agent = {x.get("agent_id"): x for x in entries if isinstance(x, dict)}
             for agent_id in all_agents:
@@ -313,10 +347,10 @@ def audit_pommerman_initial_synthesis_3round_smoke(
                 if rec.get("propagation_matches_post") is not True:
                     errors.append(f"initial propagation propagation_matches_post must be true for {agent_id}")
 
-    errors.extend(_audit_revision_manifest(Path("logs/round_1/revision_manifest.json"), "round_1"))
-    errors.extend(_audit_revision_manifest(Path("logs/round_2/revision_manifest.json"), "round_2"))
+    errors.extend(_audit_revision_manifest(Path("logs/round_1/revision_manifest.json"), "round_1", expected_agent_count))
+    errors.extend(_audit_revision_manifest(Path("logs/round_2/revision_manifest.json"), "round_2", expected_agent_count))
 
-    expected_agents = all_agents if all_agents else {f"a{i}" for i in range(1, 7)}
+    expected_agents = all_agents if all_agents else {f"a{i}" for i in range(1, expected_agent_count + 1)}
     errors.extend(
         _audit_propagation_manifest(
             Path("logs/round_2/propagation_manifest.json"),

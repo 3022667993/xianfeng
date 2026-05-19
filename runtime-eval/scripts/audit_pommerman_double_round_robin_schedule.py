@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from runner.core.config import ODD_MODEL_COUNT_ERROR
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -46,7 +48,11 @@ def audit_double_round_robin_schedule(
 
     tournament = tournament_name or _infer_tournament_name(logs_root)
     cfg = _load_cfg(tournament)
-    num_models = int(cfg.get("num_models", 0) or 0)
+    raw_num_models = cfg.get("num_models", 0)
+    try:
+        num_models = int(raw_num_models or 0)
+    except Exception:
+        num_models = 0
     if num_models <= 0:
         ism = logs_root / "initial_synthesis_manifest.json"
         if ism.exists():
@@ -62,12 +68,19 @@ def audit_double_round_robin_schedule(
         errors.append("unable to determine num_models for double_round_robin schedule audit")
         return errors, warnings
     if num_models % 2 == 1:
-        errors.append("double_round_robin requires an even number of agents; BYE scheduling is not implemented yet.")
+        errors.append(ODD_MODEL_COUNT_ERROR)
         return errors, warnings
 
     expected_matches_per_round = num_models // 2
     full_double_rr_rounds = 2 * (num_models - 1)
-    configured_rounds = int(cfg.get("num_rounds", 0) or 0)
+    raw_configured_rounds = cfg.get("num_rounds", 0)
+    if raw_configured_rounds == "auto_full_double_rr":
+        configured_rounds = full_double_rr_rounds
+    else:
+        try:
+            configured_rounds = int(raw_configured_rounds or 0)
+        except Exception:
+            configured_rounds = 0
     if configured_rounds > full_double_rr_rounds:
         errors.append(
             f"num_rounds exceeds full double round robin without repeat mode: {configured_rounds} > {full_double_rr_rounds}"

@@ -208,7 +208,13 @@ def build_tournament_report(
                 }
             )
     roster_agent_ids = [str(r.get("agent_id")) for r in roster if isinstance(r, dict) and isinstance(r.get("agent_id"), str)]
-    num_agents = len(roster_agent_ids) if roster_agent_ids else int(cfg.get("num_models", 0) or 0)
+    if roster_agent_ids:
+        num_agents = len(roster_agent_ids)
+    else:
+        try:
+            num_agents = int(cfg.get("num_models", 0) or 0)
+        except Exception:
+            num_agents = 0
     full_double_rr_rounds = (2 * (num_agents - 1)) if num_agents >= 2 else 0
 
     round_dirs = sorted(p for p in logs_root.glob("round_*") if p.is_dir())

@@ -403,7 +403,7 @@ def validate_models(models_path: Path, *, limit: int | None, real: bool, timeout
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--models", default="configs/models/openclaw_relay_6model_deepseek_glm.yaml")
+    parser.add_argument("--models", default="configs/models/openclaw_relay_current.yaml")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--real", action="store_true")
     parser.add_argument("--timeout", type=int, default=60)
