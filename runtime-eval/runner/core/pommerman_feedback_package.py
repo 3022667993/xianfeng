@@ -509,6 +509,11 @@ def write_feedback_package_v4_for_agent(
             shutil.copy2(official_src, official_pkg_dir / "game_state.json")
             replay_sources.add("pommerman_record_json_dir")
         else:
+            (official_pkg_dir / "README.txt").write_text(
+                "Official Pommerman game_state.json was not available for this match. "
+                "This package uses compact_trajectory_fallback; see package_manifest.json and actions.jsonl.\n",
+                encoding="utf-8",
+            )
             replay_sources.add("compact_trajectory_fallback")
             full_board_replay = False
 

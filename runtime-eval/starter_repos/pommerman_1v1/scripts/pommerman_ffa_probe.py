@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import importlib.util
 import json
 import shutil
@@ -10,12 +11,18 @@ from typing import Any
 
 import pommerman
 from pommerman import agents
+try:
+    from pommerman import utility
+except ImportError:
+    utility = None
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from seed_control import apply_env_seed, apply_pre_env_seed
+
+RECORD_AGENT_LABELS = ["left", "right", "dummy2", "dummy3"]
 
 
 def to_jsonable(x):
@@ -139,22 +146,40 @@ def _normalize_record_json_dir(record_json_dir: Path | None) -> bool:
 def _make_env(env_id: str, agent_list: list[Any], record_json_dir: Path | None):
     if record_json_dir is not None:
         record_json_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            return pommerman.make(env_id, agent_list, record_json_dir=str(record_json_dir))
-        except TypeError:
-            pass
-    env = pommerman.make(env_id, agent_list)
-    if record_json_dir is not None:
-        for attr, value in [
-            ("record_json_dir", str(record_json_dir)),
-            ("_record_json_dir", str(record_json_dir)),
-            ("save_json", True),
-        ]:
-            try:
-                setattr(env, attr, value)
-            except Exception:
-                pass
-    return env
+    return pommerman.make(env_id, agent_list)
+
+
+def _warn_record_json(message: str, exc: Exception) -> None:
+    print(f"[record-json-dir] {message}: {exc!r}", file=sys.stderr)
+
+
+def _save_record_json_snapshot(env: Any, record_json_dir: Path | None, context: str) -> bool:
+    if record_json_dir is None:
+        return False
+    try:
+        env.save_json(str(record_json_dir))
+        return True
+    except Exception as exc:
+        _warn_record_json(f"snapshot skipped at {context}", exc)
+        return False
+
+
+def _finalize_record_json_dir(record_json_dir: Path | None, env_id: str, info: Any) -> bool:
+    if record_json_dir is None:
+        return False
+    if utility is None:
+        return _normalize_record_json_dir(record_json_dir)
+    try:
+        utility.join_json_state(
+            str(record_json_dir),
+            RECORD_AGENT_LABELS,
+            datetime.now().isoformat(),
+            env_id,
+            info if isinstance(info, dict) else {},
+        )
+    except Exception as exc:
+        _warn_record_json("failed to finalize game_state.json", exc)
+    return _normalize_record_json_dir(record_json_dir)
 
 
 def main():
@@ -199,6 +224,7 @@ def main():
     try:
         seed_provenance = apply_env_seed(env, requested_seed, prior_provenance=pre_env_seed_provenance)
         state = env.reset()
+        record_json_active = _save_record_json_snapshot(env, record_json_dir, "reset") if record_json_dir is not None else False
         applied_seed = seed_provenance.get("applied_seed")
         seed_control_status = str(seed_provenance.get("seed_control_status") or "requested_but_not_applied")
         seed_control_error = seed_provenance.get("seed_control_error")
@@ -222,6 +248,8 @@ def main():
         while not done and step_count < 800:
             actions = env.act(state)
             state, reward, done, info = env.step(actions)
+            if record_json_active:
+                record_json_active = _save_record_json_snapshot(env, record_json_dir, f"step_{step_count + 1}")
             alive = _alive_map(state)
             positions = _positions_map(state)
             counts, notes = _compact_counts(state)
@@ -298,6 +326,8 @@ def main():
             with compact_out.open("w", encoding="utf-8") as f:
                 for row in compact_rows:
                     f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        if record_json_active:
+            _finalize_record_json_dir(record_json_dir, env_id, info)
         print(json.dumps(payload, ensure_ascii=False))
     finally:
         env.close()

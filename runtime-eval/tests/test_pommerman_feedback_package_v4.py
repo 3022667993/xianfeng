@@ -190,6 +190,11 @@ def test_feedback_package_v4_uses_compact_fallback_without_full_board_claim(tmp_
     manifest = json.loads((package_root / "package_manifest.json").read_text(encoding="utf-8"))
     assert manifest["replay_source"] == "compact_trajectory_fallback"
     assert manifest["full_board_replay"] is False
+    marker = package_root / "matches" / "match_1" / "official_record_json" / "README.txt"
+    assert marker.exists()
+    marker_text = marker.read_text(encoding="utf-8")
+    assert "Official Pommerman game_state.json was not available for this match." in marker_text
+    assert "compact_trajectory_fallback" in marker_text
     errors, _warnings = audit_feedback_package(tournament_name=tournament)
     assert errors == []
 
@@ -389,6 +394,16 @@ def test_probe_normalizes_nested_game_state_json(tmp_path):
     _write_json(record_dir / "1" / "game_state.json", {"ok": True})
     assert namespace["_normalize_record_json_dir"](record_dir) is True
     assert (record_dir / "game_state.json").exists()
+
+
+def test_probe_uses_local_pommerman_recording_api():
+    script = Path("starter_repos/pommerman_1v1/scripts/pommerman_ffa_probe.py").read_text(encoding="utf-8")
+    assert "env.save_json = True" not in script
+    assert "setattr(env, attr, value)" not in script
+    assert "record_json_dir=str(record_json_dir)" not in script
+    assert "env.save_json(str(record_json_dir))" in script
+    assert "utility.join_json_state(" in script
+    assert 'RECORD_AGENT_LABELS = ["left", "right", "dummy2", "dummy3"]' in script
 
 
 def test_v4_readme_spec_has_no_forbidden_terms():
