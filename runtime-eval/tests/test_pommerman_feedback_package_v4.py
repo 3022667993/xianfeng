@@ -157,6 +157,13 @@ def test_feedback_package_v4_generated_with_official_record_and_audits_pass(tmp_
     assert "../../README.md" in readme_text
     assert "This feedback package contains match evidence, not the rules specification." in readme_text
     assert "Feedback files are read-only evidence." in readme_text or "read-only evidence" in readme_text
+    assert "## Suggested Reading Order" in readme_text
+    assert "Start with `public_scoreboard.json`" in readme_text
+    assert "Use `matches/*/actions.jsonl` for compact per-step action evidence." in readme_text
+    assert "Inspect `matches/*/official_record_json/game_state.json` selectively" in readme_text
+    assert "This file can be large and is evidence, not the rules specification." in readme_text
+    assert "`state[0]` is the initial snapshot after reset" in readme_text
+    assert "transition from `game_state.state[t]` to `game_state.state[t+1]`" in readme_text
     for forbidden in ["starter_repos", "match_b", "both legs", "paired legs", "seat-swap legs", "center movement"]:
         assert forbidden not in readme_text.lower()
 
@@ -416,3 +423,9 @@ def test_v4_readme_spec_has_no_forbidden_terms():
     assert "match evidence, not the rules specification" in lower
     assert "current post-round codebase" in lower
     assert "read-only evidence" in lower
+    assert "suggested reading order" in lower
+    assert "start with `public_scoreboard.json`" in lower
+    assert "use `matches/*/actions.jsonl` for compact per-step action evidence" in lower
+    assert "inspect `matches/*/official_record_json/game_state.json` selectively" in lower
+    assert "`state[0]` is the initial snapshot after reset" in lower
+    assert "one more state snapshot than action rows" in lower

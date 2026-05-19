@@ -49,6 +49,18 @@ Current schedule uses single-leg double round-robin. Each match package represen
 - `matches/*/run_logs.txt`: build, test, and arena stderr logs.
 - `package_manifest.json`: package schema and replay-source metadata.
 
+## Suggested Reading Order
+
+1. Start with `public_scoreboard.json` for the public round outcomes.
+2. Then read `matches/*/match_index.json` for your own match opponent, seed, seat, winner, steps, reward, and replay paths.
+3. Use `matches/*/actions.jsonl` for compact per-step action evidence.
+4. Use `matches/*/run_logs.txt` to inspect build, test, or arena errors.
+5. Inspect `matches/*/official_record_json/game_state.json` selectively when you need board/state snapshots for a specific match segment. This file can be large and is evidence, not the rules specification.
+
+## Replay Alignment
+
+`official_record_json/game_state.json` contains official Pommerman state snapshots. `state[0]` is the initial snapshot after reset. `actions.jsonl` row `step=t` is the action vector applied to transition from `game_state.state[t]` to `game_state.state[t+1]`, so official replay usually has one more state snapshot than action rows.
+
 ## Constraints
 
 - Modify only `submission/main.py`.
