@@ -155,6 +155,8 @@ def test_feedback_package_v4_generated_with_official_record_and_audits_pass(tmp_
 
     readme_text = (package_root / "README.md").read_text(encoding="utf-8")
     assert "../../README.md" in readme_text
+    assert "This feedback package contains match evidence, not the rules specification." in readme_text
+    assert "Feedback files are read-only evidence." in readme_text or "read-only evidence" in readme_text
     for forbidden in ["starter_repos", "match_b", "both legs", "paired legs", "seat-swap legs", "center movement"]:
         assert forbidden not in readme_text.lower()
 
@@ -408,6 +410,9 @@ def test_probe_uses_local_pommerman_recording_api():
 
 def test_v4_readme_spec_has_no_forbidden_terms():
     lower = V4_README.lower()
-    for forbidden in ["starter_repos", "match_b", "both legs", "paired legs", "seat-swap legs", "safe aggression"]:
+    for forbidden in ["starter_repos", "match_b", "both legs", "paired legs", "seat-swap legs", "safe aggression", "codebase_post_"]:
         assert forbidden not in lower
     assert "../../readme.md" in lower
+    assert "match evidence, not the rules specification" in lower
+    assert "current post-round codebase" in lower
+    assert "read-only evidence" in lower

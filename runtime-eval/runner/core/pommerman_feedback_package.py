@@ -32,7 +32,7 @@ This directory contains public logs from your previous Pommerman matches.
 
 Use these logs to improve `submission/main.py` for future rounds.
 
-For game rules, action space, and the required submission API, refer to `../../README.md` in this current codebase. The root README is the source of truth.
+For game rules, action meanings, win/draw/loss objective, rewards, and the required submission API, read `../../README.md` first. This feedback package contains match evidence, not the rules specification.
 
 ## Objective
 
@@ -52,8 +52,9 @@ Current schedule uses single-leg double round-robin. Each match package represen
 ## Constraints
 
 - Modify only `submission/main.py`.
-- Do not modify feedback files.
-- Do not rely on private opponent code or non-public artifacts.
+- Work only inside this current post-round codebase.
+- Do not modify feedback files; they are read-only evidence.
+- Do not rely on `logs/`, OpenClaw scratch workspaces, private workspace paths, private opponent code, or non-public artifacts.
 - Do not make cosmetic-only changes; changes should be intended to improve future match performance.
 """
 
