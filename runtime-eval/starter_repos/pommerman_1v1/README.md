@@ -8,6 +8,8 @@ It is written for coding agents that will edit this repository across rounds. Th
 
 This starter repo defines the minimal submission contract for the `pommerman_1v1` adapter.
 
+`submission/main.py` is intentionally minimal. It provides the required `make_agent()` entry point, an object with `act(...)`, and a valid fallback action. It is not a strategy baseline. Coding agents are expected to replace it with their own behavior based on the game rules, action meanings, tournament objective, observation fields, and later feedback packages or replays.
+
 How it is used in the runtime-eval pipeline:
 
 1. The runner copies this directory into each model's per-agent workspace as `codebase_play_t`.
@@ -78,17 +80,7 @@ Do not create paired aggregate scorecards or additional per-match games inside t
 
 Your agent should improve tournament outcome against opponents under the runtime-eval scoring rules. Prefer wins over draws, and draws over losses. A dummy/background-agent win is unfavorable even when the two submitted agents are tied pairwise. Feedback packages from later rounds provide match evidence that can be used to revise strategy or behavior. If an agent is already winning, it can still improve robustness and consistency. This README defines the rules, action meanings, objective, and submission API.
 
-Practical priorities:
-
-1. Stay alive.
-2. Avoid current and future blast paths.
-3. Avoid trapping yourself with your own bomb.
-4. Use bombs to pressure opponents or destroy wooden walls only when there is an escape route.
-5. Collect powerups when safe.
-6. Treat dummy agents as moving hazards.
-7. Prefer robust safe movement over fragile aggression.
-
-Survival is usually more important than early bombing. A dead agent cannot recover later in the match.
+The starter implementation is intentionally weak. Initial synthesis should implement a complete behavior in `submission/main.py`; later revisions should use feedback packages, replay evidence, action logs, and scoreboard results to revise that behavior.
 
 ## 5. Action Space
 
@@ -443,42 +435,23 @@ A simple rule:
 Only bomb when at least one safe neighboring cell or short path is available.
 ```
 
-## 16. Basic Strategy
+## 16. Strategy Implementation
 
-Good Pommerman agents tend to follow these priorities:
+Implement your own behavior in `submission/main.py`. Use this README for the rules, actions, objective, observation fields, and submission contract. In later rounds, use feedback packages, replay evidence, action logs, run logs, and scoreboard results as evidence for revisions.
 
-1. Do not die.
-2. Escape imminent bomb blasts.
-3. Avoid dead ends.
-4. Keep distance from active bombs unless you know they are safe.
-5. Collect powerups only when safe.
-6. Bomb wooden walls when you can escape.
-7. Bomb near opponents only when you can escape.
-8. Avoid standing next to opponents if they can trap you.
-9. Treat dummy agents as moving hazards.
-10. Use Bomb sparingly; bad bombs often cause suicide.
+The starter code intentionally does not include pathfinding, danger maps, action heuristics, or matchup-specific logic. A valid submission may use any legal action in `[0, 5]`, but it should return quickly, handle missing observation fields, and keep the public API unchanged.
 
-Practical fallback order:
-
-```text
-1. Move to a safe adjacent cell.
-2. Move to the least dangerous adjacent cell.
-3. Stop only if staying is safer than moving.
-4. Bomb only if there is ammo and a safe escape path.
-```
-
-## 17. FFA Proxy Tactics
+## 17. FFA Proxy Context
 
 This runtime-eval setup is not a pure two-agent duel. It is a two-evaluated-agent proxy inside a four-agent FFA board.
 
 Implications:
 
-* dummy2/dummy3 may block paths, place bombs, or create noise
-* do not assume only the evaluated opponent can harm you
-* the evaluated opponent is the main comparison target, but survival against the whole board matters
+* dummy2/dummy3 may affect the game state
+* do not assume only the evaluated opponent matters
+* the evaluated opponent is the main comparison target
 * avoid strategies that rely on dummy agents behaving cooperatively
 * avoid overfitting to left/right seat identity
-* robust survival is often better than fragile attack logic
 
 ## 18. Submission Contract
 
@@ -605,14 +578,13 @@ The tournament runner, not this starter repo, defines final scoring.
 
 Still, useful local objectives are:
 
-* survive longer
-* avoid invalid actions
-* avoid suicide bombs
-* escape blast paths
-* improve safe movement
-* exploit safe bomb opportunities
-* collect safe powerups
-* beat the evaluated opponent more often than it beats you
+* return valid actions
+* avoid crashes on valid observations
+* improve future tournament outcomes against opponents
+* prefer wins over draws
+* prefer draws over losses
+* treat dummy/background-agent wins as unfavorable
+* improve robustness, consistency, or resilience when previous results are already favorable
 
 Raw scorecards and arena result files are written by the runner. This starter repo should not compute pair-level aggregate results.
 
@@ -624,11 +596,9 @@ Avoid these mistakes:
 * returning an action outside `[0, 5]`
 * crashing on missing observation fields
 * assuming fixed board constants without checking
-* bombing in a dead end
-* stopping inside a blast path
-* chasing unsafe powerups
-* ignoring chain reactions
-* ignoring bomb kick interactions
+* implementing no behavior beyond the fallback action
+* ignoring hazardous observations
+* assuming one fixed board encoding without defensive checks
 * assuming dummy agents are harmless
 * assuming you are always left or always right
 * performing expensive computation every step
@@ -637,20 +607,15 @@ Avoid these mistakes:
 * deleting runner artifacts
 * changing the submission interface
 
-## 24. Minimal Safe Baseline Advice
+## 24. Minimal Starter Code
 
-If you are unsure what to improve, start with these simple upgrades:
+The provided starter code is only a valid skeleton:
 
-1. Add robust observation parsing.
-2. Add board-bound checks.
-3. Identify blocked cells.
-4. Identify current flames.
-5. Estimate bomb blast paths.
-6. Prefer safe neighboring moves.
-7. Avoid bombing unless there is a clear escape route.
-8. Add a deterministic fallback action.
+* `make_agent()` returns an agent object
+* the agent object has `act(obs, action_space=None)`
+* `act(...)` returns one integer action in `[0, 5]`
 
-A boring agent that survives is often better than an aggressive agent that kills itself.
+It is acceptable for this fallback to be weak. The benchmark expects coding agents to implement their own strategy or behavior from the documented rules, objective, observations, and feedback evidence.
 
 ## 25. Official References
 
@@ -658,4 +623,3 @@ A boring agent that survives is often better than an aggressive agent that kills
 * [https://pommerman.readthedocs.io/en/latest/README/](https://pommerman.readthedocs.io/en/latest/README/)
 * [https://pommerman.readthedocs.io/en/latest/game_rules/](https://pommerman.readthedocs.io/en/latest/game_rules/)
 * [https://github.com/MultiAgentLearning/playground](https://github.com/MultiAgentLearning/playground)
-

@@ -217,6 +217,9 @@ def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_const
         prompt_variant="neutral",
     )
     assert "assigned strategy profile id: profile_a" in msg
+    assert "starter `submission/main.py` is intentionally minimal" in msg
+    assert "only provides the required API plus a valid fallback action" in msg
+    assert "Replace the minimal fallback with a concrete strategy or behavior implementation" in msg
     assert "Objective: improve expected future tournament outcome while preserving valid actions" in msg
     assert "Prefer wins over draws, and draws over losses." in msg
     assert "concrete behavior or strategy" in msg
