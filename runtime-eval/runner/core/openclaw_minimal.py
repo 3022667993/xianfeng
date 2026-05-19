@@ -515,8 +515,10 @@ Bootstrap contract:
 Task:
 - You are creating the first Pommerman agent from the shared starter repo.
 - The starter `submission/main.py` is intentionally minimal and only provides the required API plus a valid fallback action.
+- The required API includes `make_agent()` returning an instance of a class that subclasses `pommerman.agents.BaseAgent`.
 - This agent has a distinct assigned strategy profile.
 - Replace the minimal fallback with a concrete strategy or behavior implementation in submission/main.py.
+- Preserve a valid `make_agent()` entry point and `pommerman.agents.BaseAgent` inheritance.
 - Do not copy a generic template unchanged.
 - The submitted code should be meaningfully different from the starter and should reflect the assigned profile.
 - Inspect bot code at: {codebase_post_t_dir / "submission/main.py"}

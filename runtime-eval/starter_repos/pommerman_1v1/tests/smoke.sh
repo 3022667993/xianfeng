@@ -24,6 +24,14 @@ if not callable(make_agent):
 agent = make_agent()
 if agent is None:
     raise TypeError("make_agent() must return an agent object")
+
+from pommerman import agents
+if not isinstance(agent, agents.BaseAgent):
+    raise TypeError("make_agent() must return a pommerman.agents.BaseAgent instance")
+
+action = agent.act({}, None)
+if not isinstance(action, int) or not 0 <= action <= 5:
+    raise TypeError("agent.act(...) must return an integer action in [0, 5]")
 PY
 
 echo "[smoke] starter repo contract OK"

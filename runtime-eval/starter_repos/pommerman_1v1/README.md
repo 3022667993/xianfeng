@@ -8,7 +8,7 @@ It is written for coding agents that will edit this repository across rounds. Th
 
 This starter repo defines the minimal submission contract for the `pommerman_1v1` adapter.
 
-`submission/main.py` is intentionally minimal. It provides the required `make_agent()` entry point, an object with `act(...)`, and a valid fallback action. It is not a strategy baseline. Coding agents are expected to replace it with their own behavior based on the game rules, action meanings, tournament objective, observation fields, and later feedback packages or replays.
+`submission/main.py` is intentionally minimal. It provides the required `make_agent()` entry point, a `pommerman.agents.BaseAgent` subclass with `act(...)`, and a valid fallback action. It is not a strategy baseline. Coding agents are expected to replace it with their own behavior based on the game rules, action meanings, tournament objective, observation fields, and later feedback packages or replays.
 
 How it is used in the runtime-eval pipeline:
 
@@ -469,7 +469,9 @@ The adapter validates this contract before arena integration.
 Contract requirements:
 
 * Keep `submission/main.py` importable.
-* Preserve the expected public entry point used by the existing starter code.
+* Define `make_agent()`.
+* `make_agent()` must return an instance of a class that subclasses `pommerman.agents.BaseAgent`.
+* The class must implement `act(self, obs, action_space=None)` or a compatible signature.
 * Do not change the interface expected by `scripts/run_submission.sh`.
 * Return one integer action in `[0, 5]`.
 * Return quickly.
@@ -479,6 +481,21 @@ Contract requirements:
 * Do not delete runner-generated artifacts.
 * Do not create aggregate scorecards.
 * Do not depend on hidden state outside the codebase.
+
+Recommended minimal pattern:
+
+```python
+from pommerman import agents
+
+
+class Agent(agents.BaseAgent):
+    def act(self, obs, action_space=None):
+        return 0
+
+
+def make_agent():
+    return Agent()
+```
 
 ## 19. Repository Layout
 
@@ -611,7 +628,7 @@ Avoid these mistakes:
 
 The provided starter code is only a valid skeleton:
 
-* `make_agent()` returns an agent object
+* `make_agent()` returns a `pommerman.agents.BaseAgent` instance
 * the agent object has `act(obs, action_space=None)`
 * `act(...)` returns one integer action in `[0, 5]`
 

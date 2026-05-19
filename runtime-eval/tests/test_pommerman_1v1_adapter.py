@@ -1,8 +1,29 @@
 import ast
 import importlib.util
+import sys
+import types
 from pathlib import Path
 
+import pytest
+
 from runner.adapters.pommerman_1v1 import Pommerman1v1Adapter
+
+
+class _FakeBaseAgent:
+    pass
+
+
+def _load_starter_module(monkeypatch):
+    fake_pommerman = types.ModuleType("pommerman")
+    fake_pommerman.agents = types.SimpleNamespace(BaseAgent=_FakeBaseAgent)
+    monkeypatch.setitem(sys.modules, "pommerman", fake_pommerman)
+
+    path = Path("starter_repos/pommerman_1v1/submission/main.py").resolve()
+    spec = importlib.util.spec_from_file_location("starter_submission_main", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module, fake_pommerman
 
 
 def test_pommerman_contract_valid():
@@ -48,8 +69,10 @@ def test_starter_submission_is_minimal_valid_skeleton():
 
     assert class_names == {"Agent"}
     assert function_names == {"make_agent"}
+    assert "from pommerman import agents" in source
+    assert "class Agent(agents.BaseAgent):" in source
     assert "return 0" in source
-    assert len(source.splitlines()) <= 15
+    assert len(source.splitlines()) <= 17
     for forbidden in [
         "ConservativeAgent",
         "ProactiveSafeAgent",
@@ -70,15 +93,45 @@ def test_starter_submission_is_minimal_valid_skeleton():
         assert forbidden not in source
 
 
-def test_starter_submission_make_agent_returns_valid_action():
+def test_starter_submission_make_agent_returns_baseagent_and_valid_action(monkeypatch):
+    module, fake_pommerman = _load_starter_module(monkeypatch)
+    agent = module.make_agent()
+    assert isinstance(agent, fake_pommerman.agents.BaseAgent)
+    assert hasattr(agent, "act")
+    action = agent.act({}, None)
+    assert isinstance(action, int)
+    assert 0 <= action <= 5
+
+
+def test_starter_readme_documents_baseagent_contract():
+    readme = Path("starter_repos/pommerman_1v1/README.md").read_text(encoding="utf-8")
+    lower = readme.lower()
+    assert "pommerman.agents.baseagent" in lower
+    assert "make_agent()" in readme
+    assert "must return an instance of a class that subclasses `pommerman.agents.BaseAgent`" in readme
+    assert "act(self, obs, action_space=None)" in readme
+    assert "from pommerman import agents" in readme
+    assert "class Agent(agents.BaseAgent)" in readme
+    assert "act(...)` returns one integer action in `[0, 5]`" in readme
+
+
+def test_starter_baseagent_is_accepted_by_real_pommerman_env():
+    pommerman = pytest.importorskip("pommerman")
+    agents = pytest.importorskip("pommerman.agents")
+
     path = Path("starter_repos/pommerman_1v1/submission/main.py").resolve()
-    spec = importlib.util.spec_from_file_location("starter_submission_main", path)
+    spec = importlib.util.spec_from_file_location("starter_submission_main_real", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    agent = module.make_agent()
-    assert hasattr(agent, "act")
-    action = agent.act({})
-    assert isinstance(action, int)
-    assert 0 <= action <= 5
+    left = module.make_agent()
+    right = module.make_agent()
+    assert isinstance(left, agents.BaseAgent)
+    assert isinstance(right, agents.BaseAgent)
+
+    env = pommerman.make("PommeFFACompetition-v0", [left, right, agents.RandomAgent(), agents.RandomAgent()])
+    try:
+        assert env is not None
+    finally:
+        env.close()
