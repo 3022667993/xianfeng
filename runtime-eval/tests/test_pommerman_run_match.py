@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from runner.adapters.pommerman_1v1 import Pommerman1v1Adapter
 
@@ -18,3 +19,8 @@ def test_pommerman_run_match_smoke(tmp_path):
     assert (round_dir / "build.log").exists()
     assert (round_dir / "test.log").exists()
     assert (round_dir / "stderr.log").exists()
+    scorecard = json.loads((round_dir / "scorecard.json").read_text(encoding="utf-8"))
+    assert "environment_winners" in scorecard
+    assert "environment_winner_labels" in scorecard
+    assert "submitted_pair_outcome" in scorecard
+    assert "draw_type" in scorecard

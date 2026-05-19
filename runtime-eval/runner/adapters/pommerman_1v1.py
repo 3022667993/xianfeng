@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from runner.adapters.base import BaseGameAdapter
+from runner.core.pommerman_results import classify_pommerman_result
 
 
 class Pommerman1v1Adapter(BaseGameAdapter):
@@ -333,6 +334,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                 "done": False,
                 "reward": [0, 0, 0, 0],
                 "info": {"winners": []},
+                "arena_fallback_or_invalid": True,
                 "requested_seed": req_seed,
                 "applied_seed": app_seed,
                 "seed": normalized_seed,
@@ -402,6 +404,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                 arena_payload_match_a["official_record_json_match_a_path"] = str(
                     official_record_match_a_dir / "game_state.json"
                 )
+                arena_payload_match_a.update(classify_pommerman_result(arena_payload_match_a))
                 arena_result_match_a_path.write_text(
                     json.dumps(arena_payload_match_a, ensure_ascii=False, indent=2),
                     encoding="utf-8",
@@ -567,6 +570,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                 method_applied=method_a,
                 env_seed_return=env_seed_ret_a,
             )
+            fallback_match_a.update(classify_pommerman_result(fallback_match_a))
             arena_result_match_a_path.write_text(
                 json.dumps(fallback_match_a, ensure_ascii=False, indent=2),
                 encoding="utf-8",
@@ -574,6 +578,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
         scorecard_path = round_dir / "scorecard.json"
         if not scorecard_path.exists():
             scorecard_payload = json.loads(arena_result_match_a_path.read_text(encoding="utf-8"))
+            scorecard_payload.update(classify_pommerman_result(scorecard_payload))
             scorecard_payload["seat_swap"] = False
             scorecard_payload["match_legs"] = ["match_a"]
             scorecard_payload["schedule_mode"] = "double_round_robin"

@@ -53,6 +53,36 @@ def _round_tie_rate(round_idx: int) -> str:
     return f"{draws}/{total} ({draws/total:.1%})"
 
 
+def _round_draw_type_counts(round_idx: int) -> str:
+    rd = Path("logs") / f"round_{round_idx}"
+    rm = rd / "round_manifest.json"
+    if not rm.exists():
+        return "n/a"
+    try:
+        matches = _load_json(rm).get("matches", [])
+    except Exception:
+        return "n/a"
+    if not isinstance(matches, list) or not matches:
+        return "n/a"
+    counts: dict[str, int] = {}
+    for m in matches:
+        if not isinstance(m, dict):
+            continue
+        sc_path = m.get("scorecard_path")
+        if not isinstance(sc_path, str):
+            continue
+        try:
+            sc = _load_json(Path(sc_path))
+        except Exception:
+            continue
+        draw_type = sc.get("draw_type")
+        if isinstance(draw_type, str) and draw_type:
+            counts[draw_type] = counts.get(draw_type, 0) + 1
+    if not counts:
+        return "n/a"
+    return ",".join(f"{key}:{counts[key]}" for key in sorted(counts))
+
+
 def _round_extra_metrics(round_idx: int) -> tuple[str, str, str, str]:
     rd = Path("logs") / f"round_{round_idx}"
     rm = rd / "round_manifest.json"
@@ -298,6 +328,7 @@ def main() -> int:
         "openclaw_changedFiles",
         "propagated_hash_match",
         "round_tie_rate",
+        "round_draw_type_counts",
         "bomb_action_rate",
         "stop_action_rate",
         "average_terminal_step",
@@ -315,6 +346,7 @@ def main() -> int:
     for round_idx in rounds:
         rev = Path("logs") / f"round_{round_idx}" / "revision_manifest.json"
         tie_rate = _round_tie_rate(round_idx)
+        draw_type_counts = _round_draw_type_counts(round_idx)
         bomb_rate, stop_rate, avg_terminal_step, non_draw_count = _round_extra_metrics(round_idx)
         if not rev.exists():
             continue
@@ -363,6 +395,7 @@ def main() -> int:
                     str(a.get("changed_files_reported_by_openclaw")),
                     prop_lookup.get((round_idx + 1, aid), "n/a"),
                     tie_rate,
+                    draw_type_counts,
                     bomb_rate,
                     stop_rate,
                     avg_terminal_step,

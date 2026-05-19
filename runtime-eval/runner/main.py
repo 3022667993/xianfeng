@@ -11,6 +11,7 @@ from runner.adapters.registry import get_adapter
 from runner.core.artifacts import ensure_round_dir, write_json
 from runner.core.config import load_yaml, require_keys
 from runner.core.fsops import copy_tree
+from runner.core.pommerman_results import classify_pommerman_result
 from runner.core.revision import apply_minimal_initial_synthesis, apply_minimal_revision, apply_noop_revision, write_diff_patch
 from runner.core.schedule import build_double_round_robin
 from runner.core.pommerman_feedback import write_feedback_artifact_mirrors, write_process_feedback
@@ -1231,25 +1232,26 @@ def _run_openclaw_adaptive_smoke_tournament(
             if valid and left_export_ok and right_export_ok:
                 adapter.run_match(left_play, right_play, match_dir, match_cfg)
             else:
+                invalid_result = {
+                    "left_right_winner": "draw",
+                    "steps": 0,
+                    "done": False,
+                    "reward": [0, 0, 0, 0],
+                    "info": {"winners": []},
+                    "arena_fallback_or_invalid": True,
+                    "requested_seed": None,
+                    "applied_seed": None,
+                    "seed": None,
+                    "seed_control_status": "requested_but_not_applied",
+                }
+                invalid_result.update(classify_pommerman_result(invalid_result))
                 write_json(
                     match_dir / "scorecard.json",
-                    {
-                        "left_right_winner": "draw",
-                        "requested_seed": None,
-                        "applied_seed": None,
-                        "seed": None,
-                        "seed_control_status": "requested_but_not_applied",
-                    },
+                    invalid_result,
                 )
                 write_json(
                     match_dir / "arena_result_match_a.json",
-                    {
-                        "left_right_winner": "draw",
-                        "requested_seed": None,
-                        "applied_seed": None,
-                        "seed": None,
-                        "seed_control_status": "requested_but_not_applied",
-                    },
+                    invalid_result,
                 )
             scorecard = {"left_right_winner": "draw"}
             sc_path = match_dir / "scorecard.json"

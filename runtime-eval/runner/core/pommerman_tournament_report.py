@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from runner.core.pommerman_results import classify_pommerman_result, format_submitted_pair_outcome
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -272,6 +274,11 @@ def build_tournament_report(
                     key = tuple(sorted([left_agent, right_agent]))
                     pair_counts.setdefault(key, []).append((left_agent, right_agent))
                     games_seen += 1
+                classification = classify_pommerman_result(arena_a)
+                result_display_payload = {
+                    **arena_a,
+                    **classification,
+                }
                 match_rows.append(
                     {
                         "match_id": match_id,
@@ -281,6 +288,8 @@ def build_tournament_report(
                         "winner": arena_a.get("left_right_winner"),
                         "steps": arena_a.get("steps"),
                         "reward": arena_a.get("reward"),
+                        **classification,
+                        "result_label": format_submitted_pair_outcome(result_display_payload),
                     }
                 )
 
@@ -607,7 +616,7 @@ def render_tournament_report_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- schedule_mode: {rd.get('schedule_mode')}")
         lines.append(f"- match_legs: {rd.get('match_legs')}")
         matches = rd.get("matches", [])
-        lines.append("| round | match | left | right | seed | winner | steps | reward |")
+        lines.append("| round | match | left | right | seed | outcome | steps | reward |")
         lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
         if isinstance(matches, list):
             for m in matches:
@@ -615,7 +624,7 @@ def render_tournament_report_markdown(report: dict[str, Any]) -> str:
                     continue
                 lines.append(
                     f"| {r} | {m.get('match_id')} | {m.get('left_agent_id')} | {m.get('right_agent_id')} | {m.get('seed')} | "
-                    f"{m.get('winner')} | {m.get('steps')} | {m.get('reward')} |"
+                    f"{m.get('result_label') or m.get('winner')} | {m.get('steps')} | {m.get('reward')} |"
                 )
         lines.append("")
         rs = rd.get("round_summary", {}) if isinstance(rd.get("round_summary"), dict) else {}

@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from runner.core.pommerman_results import classify_pommerman_result
+
 
 FORBIDDEN_FILENAMES = {
     "revision_manifest.json",
@@ -237,6 +239,13 @@ def _audit_v4_package(
             errors.append(f"{scoreboard_path}: matches must be a list")
         elif len(sc_matches) != len(match_by_id):
             errors.append(f"{scoreboard_path}: expected {len(match_by_id)} matches, found {len(sc_matches)}")
+        if isinstance(sc_matches, list):
+            for row in sc_matches:
+                if not isinstance(row, dict):
+                    continue
+                for key in ["environment_winners", "environment_winner_labels", "submitted_pair_outcome", "draw_type"]:
+                    if key not in row:
+                        errors.append(f"{scoreboard_path}: match row missing {key}")
 
     expected_own_matches = [
         m
@@ -319,12 +328,16 @@ def _audit_v4_package(
                 if match_index.get("applied_seed") != metadata.get("applied_seed"):
                     errors.append(f"{match_index_path}: applied_seed mismatch vs metadata")
             if isinstance(arena_a, dict):
+                expected_classification = classify_pommerman_result(arena_a)
                 if game.get("winner") != arena_a.get("left_right_winner"):
                     errors.append(f"{match_index_path}: winner mismatch vs arena")
                 if game.get("steps") != arena_a.get("steps"):
                     errors.append(f"{match_index_path}: steps mismatch vs arena")
                 if game.get("reward") != arena_a.get("reward"):
                     errors.append(f"{match_index_path}: reward mismatch vs arena")
+                for key, expected_value in expected_classification.items():
+                    if game.get(key) != expected_value:
+                        errors.append(f"{match_index_path}: {key} mismatch vs arena")
 
         if actions_path.exists():
             rows = [payload for _line_no, payload in _iter_jsonl(actions_path)]

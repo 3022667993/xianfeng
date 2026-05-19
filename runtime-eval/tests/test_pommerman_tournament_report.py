@@ -77,6 +77,45 @@ def test_tournament_report_writes_json_and_md(tmp_path, monkeypatch):
     assert "## Audit Summary" in md_text
 
 
+def test_tournament_report_labels_dummy_winner_draw(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    t = "t_report_dummy_draw"
+
+    rd = tmp_path / "logs" / "round_1"
+    md = rd / "match_1"
+    md.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        md / "arena_result_match_a.json",
+        {"steps": 12, "reward": [-1, -1, 1, -1], "info": {"winners": [2]}, "left_right_winner": "draw"},
+    )
+    _write_json(md / "scorecard.json", {"seat_swap": False, "match_legs": "single", "left_right_winner": "draw"})
+    _write_json(md / "metadata.json", {"left_agent_id": "a1", "right_agent_id": "a2", "applied_seed": 123, "requested_seed": 123})
+    _write_json(
+        rd / "round_manifest.json",
+        {
+            "round_idx": 1,
+            "schedule_mode": "double_round_robin",
+            "match_legs": "single",
+            "matches": [
+                {"match_id": "match_1", "match_idx": 1, "left_agent_id": "a1", "right_agent_id": "a2", "applied_seed": 123},
+            ],
+            "feedback_package_variant": "codeclash_v4",
+            "feedback_visibility": "own_matches_plus_public_scoreboard",
+        },
+    )
+
+    report = write_tournament_report(tournament_name=t)
+    match = report["rounds"][0]["matches"][0]
+    assert match["winner"] == "draw"
+    assert match["environment_winners"] == [2]
+    assert match["environment_winner_labels"] == ["dummy2"]
+    assert match["submitted_pair_outcome"] == "both_submitted_agents_lost_to_dummy"
+    assert match["draw_type"] == "both_lost_to_dummy"
+    assert match["result_label"] == "draw (both submitted agents lost to dummy2)"
+    md_text = (tmp_path / "logs" / "tournament_report.md").read_text(encoding="utf-8")
+    assert "draw (both submitted agents lost to dummy2)" in md_text
+
+
 def test_tournament_report_marks_incomplete_when_round_manifest_missing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     t = "t_incomplete"

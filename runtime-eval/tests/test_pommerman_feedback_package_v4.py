@@ -42,11 +42,16 @@ def _mk_match(
     applied_seed: int,
     steps: int = 3,
     winner: str = "draw",
+    reward: list[int] | None = None,
+    info: dict | None = None,
     official_record: bool = True,
 ) -> dict:
     match_dir = root / "logs" / f"round_{round_idx}" / f"match_{match_idx}"
     match_dir.mkdir(parents=True, exist_ok=True)
-    reward = [0, 0, 0, 0] if winner == "draw" else ([1, -1, -1, -1] if winner == "left" else [-1, 1, -1, -1])
+    if reward is None:
+        reward = [0, 0, 0, 0] if winner == "draw" else ([1, -1, -1, -1] if winner == "left" else [-1, 1, -1, -1])
+    if info is None:
+        info = {"winners": [] if winner == "draw" else ([0] if winner == "left" else [1])}
     _write_json(
         match_dir / "metadata.json",
         {
@@ -66,6 +71,7 @@ def _mk_match(
         {
             "steps": steps,
             "reward": reward,
+            "info": info,
             "left_right_winner": winner,
             "requested_seed": requested_seed,
             "applied_seed": applied_seed,
@@ -143,6 +149,15 @@ def test_feedback_package_v4_generated_with_official_record_and_audits_pass(tmp_
     assert manifest["full_board_replay"] is True
     assert (package_root / "matches" / "match_1" / "match_index.json").exists()
     assert (package_root / "matches" / "match_1" / "official_record_json" / "game_state.json").exists()
+    scoreboard = json.loads((package_root / "public_scoreboard.json").read_text(encoding="utf-8"))
+    score_row = scoreboard["matches"][0]
+    assert score_row["environment_winners"] == []
+    assert score_row["environment_winner_labels"] == []
+    assert score_row["submitted_pair_outcome"] == "unknown_draw"
+    assert score_row["draw_type"] == "unknown_draw"
+    match_index = json.loads((package_root / "matches" / "match_1" / "match_index.json").read_text(encoding="utf-8"))
+    assert match_index["game"]["submitted_pair_outcome"] == "unknown_draw"
+    assert match_index["game"]["draw_type"] == "unknown_draw"
     actions = [
         json.loads(line)
         for line in (package_root / "matches" / "match_1" / "actions.jsonl").read_text(encoding="utf-8").splitlines()
@@ -156,6 +171,12 @@ def test_feedback_package_v4_generated_with_official_record_and_audits_pass(tmp_
     readme_text = (package_root / "README.md").read_text(encoding="utf-8")
     assert "../../README.md" in readme_text
     assert "This feedback package contains match evidence, not the rules specification." in readme_text
+    assert "Prefer winning over drawing, and drawing over losing." in readme_text
+    assert "A timeout draw is not a strong success signal if better outcomes are possible." in readme_text
+    assert "both submitted agents lost to a dummy/background agent" in readme_text
+    assert "not as a successful draw" in readme_text
+    assert "`submitted_pair_outcome`: distinguishes wins, timeout draws, dummy/background-agent wins" in readme_text
+    assert "`draw_type`: explains why a pairwise draw occurred" in readme_text
     assert "Feedback files are read-only evidence." in readme_text or "read-only evidence" in readme_text
     assert "## Suggested Reading Order" in readme_text
     assert "Start with `public_scoreboard.json`" in readme_text
@@ -164,8 +185,70 @@ def test_feedback_package_v4_generated_with_official_record_and_audits_pass(tmp_
     assert "This file can be large and is evidence, not the rules specification." in readme_text
     assert "`state[0]` is the initial snapshot after reset" in readme_text
     assert "transition from `game_state.state[t]` to `game_state.state[t+1]`" in readme_text
-    for forbidden in ["starter_repos", "match_b", "both legs", "paired legs", "seat-swap legs", "center movement"]:
+    for forbidden in [
+        "starter_repos",
+        "match_b",
+        "both legs",
+        "paired legs",
+        "seat-swap legs",
+        "center movement",
+        "wood clearing",
+        "powerups",
+        "opponent pressure",
+        "reduce stop",
+        "safe aggression",
+    ]:
         assert forbidden not in readme_text.lower()
+
+    errors, _warnings = audit_feedback_package(tournament_name=tournament)
+    assert errors == []
+
+
+def test_feedback_package_v4_classifies_dummy_winner_draw(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tournament = "t_feedback_v4_dummy_winner"
+    records = [
+        _mk_match(
+            root=tmp_path,
+            round_idx=1,
+            match_idx=1,
+            left_agent_id="a1",
+            right_agent_id="a2",
+            requested_seed=111,
+            applied_seed=111,
+            steps=12,
+            winner="draw",
+            reward=[-1, -1, 1, -1],
+            info={"winners": [2]},
+        )
+    ]
+    _mk_round_context(tmp_path, tournament, records, ["a1", "a2"])
+
+    for agent_id in ["a1", "a2"]:
+        write_feedback_package_for_agent(
+            tournament_name=tournament,
+            round_idx=1,
+            agent_id=agent_id,
+            round_match_records=records,
+            feedback_package_variant="codeclash_v4",
+        )
+
+    package_root = tmp_path / "workspace" / "posts" / tournament / "a1" / "codebase_post_1" / "feedback" / "round_1"
+    scoreboard = json.loads((package_root / "public_scoreboard.json").read_text(encoding="utf-8"))
+    row = scoreboard["matches"][0]
+    assert row["winner"] == "draw"
+    assert row["environment_winners"] == [2]
+    assert row["environment_winner_labels"] == ["dummy2"]
+    assert row["submitted_pair_outcome"] == "both_submitted_agents_lost_to_dummy"
+    assert row["draw_type"] == "both_lost_to_dummy"
+
+    match_index = json.loads((package_root / "matches" / "match_1" / "match_index.json").read_text(encoding="utf-8"))
+    game = match_index["game"]
+    assert game["winner"] == "draw"
+    assert game["environment_winners"] == [2]
+    assert game["environment_winner_labels"] == ["dummy2"]
+    assert game["submitted_pair_outcome"] == "both_submitted_agents_lost_to_dummy"
+    assert game["draw_type"] == "both_lost_to_dummy"
 
     errors, _warnings = audit_feedback_package(tournament_name=tournament)
     assert errors == []
@@ -417,10 +500,29 @@ def test_probe_uses_local_pommerman_recording_api():
 
 def test_v4_readme_spec_has_no_forbidden_terms():
     lower = V4_README.lower()
-    for forbidden in ["starter_repos", "match_b", "both legs", "paired legs", "seat-swap legs", "safe aggression", "codebase_post_"]:
+    for forbidden in [
+        "starter_repos",
+        "match_b",
+        "both legs",
+        "paired legs",
+        "seat-swap legs",
+        "center movement",
+        "wood clearing",
+        "powerups",
+        "opponent pressure",
+        "reduce stop",
+        "safe aggression",
+        "codebase_post_",
+    ]:
         assert forbidden not in lower
     assert "../../readme.md" in lower
     assert "match evidence, not the rules specification" in lower
+    assert "prefer winning over drawing, and drawing over losing" in lower
+    assert "timeout draw is not a strong success signal" in lower
+    assert "both submitted agents lost to a dummy/background agent" in lower
+    assert "not as a successful draw" in lower
+    assert "`submitted_pair_outcome`: distinguishes wins, timeout draws, dummy/background-agent wins" in lower
+    assert "`draw_type`: explains why a pairwise draw occurred" in lower
     assert "current post-round codebase" in lower
     assert "read-only evidence" in lower
     assert "suggested reading order" in lower

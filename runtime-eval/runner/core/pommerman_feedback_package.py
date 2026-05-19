@@ -7,6 +7,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from runner.core.pommerman_results import classify_pommerman_result
+
 NEUTRAL_README = """This directory contains logs from your previous Pommerman matches.
 
 Use these logs to improve submission/main.py for future rounds.
@@ -36,7 +38,7 @@ For game rules, action meanings, win/draw/loss objective, rewards, and the requi
 
 ## Objective
 
-Improve future match performance. Prefer winning over drawing, and drawing over losing.
+Improve future match performance under the tournament scoring rules. Prefer winning over drawing, and drawing over losing. A timeout draw is not a strong success signal if better outcomes are possible. If `submitted_pair_outcome` says both submitted agents lost to a dummy/background agent, treat that as an unfavorable outcome, not as a successful draw.
 
 Current schedule uses single-leg double round-robin. Each match package represents one game. Seat-bias is handled by later reversed encounters in the full double round-robin schedule, not by running multiple games inside one scheduled match.
 
@@ -44,6 +46,8 @@ Current schedule uses single-leg double round-robin. Each match package represen
 
 - `public_scoreboard.json`: public outcomes for all matches in this round.
 - `matches/*/match_index.json`: your match opponent, seed, seat assignment, winner, steps, reward, and replay paths.
+- `submitted_pair_outcome`: distinguishes wins, timeout draws, dummy/background-agent wins, and invalid arena fallback results.
+- `draw_type`: explains why a pairwise draw occurred when the match winner is reported as `draw`.
 - `matches/*/official_record_json/game_state.json`: Pommerman official per-step game-state record when available.
 - `matches/*/actions.jsonl`: per-step actions recorded by the wrapper/compact trajectory.
 - `matches/*/run_logs.txt`: build, test, and arena stderr logs.
@@ -493,6 +497,7 @@ def write_feedback_package_v4_for_agent(
                 "steps": arena.get("steps"),
                 "reward": arena.get("reward"),
                 "applied_seed": rec.get("applied_seed"),
+                **classify_pommerman_result(arena),
             }
         )
 
@@ -512,6 +517,7 @@ def write_feedback_package_v4_for_agent(
         official_pkg_dir.mkdir(parents=True, exist_ok=True)
 
         arena = _load_json(match_dir / "arena_result_match_a.json") if (match_dir / "arena_result_match_a.json").exists() else {}
+        classification = classify_pommerman_result(arena)
         agent_seat = _seat_for_agent(agent_id, rec["left_agent_id"], rec["right_agent_id"])
         opponent_seat = "right" if agent_seat == "left" else "left"
         opponent_agent_id = _opponent_agent_id(agent_id, rec["left_agent_id"], rec["right_agent_id"])
@@ -556,6 +562,7 @@ def write_feedback_package_v4_for_agent(
                 "winner": _winner(arena.get("left_right_winner")),
                 "steps": arena.get("steps"),
                 "reward": arena.get("reward"),
+                **classification,
                 "official_record_path": "official_record_json/game_state.json",
                 "actions_path": actions_rel,
             },
