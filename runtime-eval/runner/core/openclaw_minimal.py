@@ -244,6 +244,7 @@ def _seed_isolated_openclaw_state(
     *,
     isolated_state_dir: Path,
     agent_id: str,
+    workspace_dir: Path,
 ) -> tuple[Path | None, list[str]]:
     warnings: list[str] = []
     isolated_state_dir.mkdir(parents=True, exist_ok=True)
@@ -256,7 +257,14 @@ def _seed_isolated_openclaw_state(
         shutil.copy2(source_config, isolated_config_path)
     else:
         warnings.append("source_openclaw_config_missing")
-        isolated_config_path = None
+        isolated_config_path.parent.mkdir(parents=True, exist_ok=True)
+        isolated_config_path.write_text("{}\n", encoding="utf-8")
+
+    _set_openclaw_config_workspace(
+        isolated_config_path,
+        agent_id=agent_id,
+        workspace_dir=workspace_dir,
+    )
 
     src_agent_dir = source_state_dir / "agents" / agent_id / "agent"
     dst_agent_dir = isolated_state_dir / "agents" / agent_id / "agent"
@@ -268,6 +276,58 @@ def _seed_isolated_openclaw_state(
 
     (isolated_state_dir / "agents" / agent_id / "sessions").mkdir(parents=True, exist_ok=True)
     return isolated_config_path, warnings
+
+
+def _set_openclaw_config_workspace(
+    config_path: Path,
+    *,
+    agent_id: str,
+    workspace_dir: Path,
+) -> None:
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        config = {}
+    if not isinstance(config, dict):
+        config = {}
+
+    agents = config.get("agents")
+    if not isinstance(agents, dict):
+        agents = {}
+        config["agents"] = agents
+
+    defaults = agents.get("defaults")
+    if not isinstance(defaults, dict):
+        defaults = {}
+        agents["defaults"] = defaults
+    defaults["workspace"] = str(workspace_dir.resolve())
+
+    agent_list = agents.get("list")
+    if not isinstance(agent_list, list):
+        agent_list = []
+        agents["list"] = agent_list
+
+    selected: dict[str, Any] | None = None
+    for entry in agent_list:
+        if isinstance(entry, dict) and str(entry.get("id", "")).strip() == agent_id:
+            selected = entry
+            break
+    if selected is None:
+        selected = {"id": agent_id}
+        agent_list.append(selected)
+    selected["workspace"] = str(workspace_dir.resolve())
+
+    tools = config.get("tools")
+    if not isinstance(tools, dict):
+        tools = {}
+        config["tools"] = tools
+    fs_tools = tools.get("fs")
+    if not isinstance(fs_tools, dict):
+        fs_tools = {}
+        tools["fs"] = fs_tools
+    fs_tools["workspaceOnly"] = True
+
+    config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _run_openclaw_agent(
@@ -399,7 +459,6 @@ def _make_revision_message(
     else:
         feedback_package_task_line = "- feedback package: unavailable\n"
     feedback_package_line = f"- feedback_package_path: {feedback_package_path}" if feedback_package_path is not None else "- feedback_package_path: unavailable"
-    editable_target = codebase_post_t_dir / "submission/main.py"
     prefix = f"""You are OpenClaw-Minimal running inside a controlled runtime-eval revision executor.
 
 IMPORTANT:
@@ -414,8 +473,7 @@ Experiment:
 - game: {game}
 - regime: {regime}
 - side: {side}
-- run_dir: {run_dir}
-- codebase_post_t_dir: {codebase_post_t_dir}
+- workspace: per-run codebase workspace
 {feedback_package_line}
 
 Bootstrap contract:
@@ -426,15 +484,13 @@ Task:
 {extra_artifacts_block}- Do not rely on a long list of internal artifact paths.
 - For Pommerman A00, revise the bot based on the feedback.
 - Editable target:
-  - Open and edit the exact absolute target file: `{editable_target}`.
+  - Open and edit exactly: `submission/main.py`.
+  - This path is relative to the per-run codebase workspace.
   - This is the only submission source file whose changes will be collected by the runner.
-  - Do not edit workspace-root `submission/main.py`.
-  - Do not edit `submission/main.py` unless your tool is already operating inside `{codebase_post_t_dir}`.
-  - Do not edit `codebase_post_t/submission/main.py` relative to the OpenClaw workspace root.
+  - First read `submission/main.py`, then edit or rewrite it.
+  - If the edit tool fails because oldText does not match, use the write tool to overwrite `submission/main.py` with a complete valid file.
+  - Do not finish until `submission/main.py` has actually changed.
   - Do not edit notes, audit files, README, scripts, tests, configs, or metadata instead.
-  - First read the exact target file, then edit or rewrite that exact target file.
-  - If the edit tool fails because oldText does not match, use the write tool to overwrite the exact absolute target file with a complete valid `submission/main.py`.
-  - Do not finish until the exact target file has actually changed.
 - The runner will write revision_log.md separately.
 - Do not create or modify any other file.
 - You must modify submission/main.py; metadata-only edits do not count.
@@ -502,7 +558,6 @@ def _make_initial_synthesis_message(
         )
     profile_id = strategy_profile_id or "default_profile"
     profile_text = strategy_profile_text or "balanced survivability and safe progression"
-    editable_target = codebase_post_t_dir / "submission/main.py"
     prefix = f"""You are OpenClaw-Minimal running inside a controlled runtime-eval initial synthesis executor.
 
 IMPORTANT:
@@ -516,8 +571,7 @@ Only modify the allowed file listed below.
 Experiment:
 - game: {game}
 - regime: {regime}
-- run_dir: {run_dir}
-- codebase_post_t_dir: {codebase_post_t_dir}
+- workspace: per-run codebase workspace
 - initial synthesis mode: no match feedback is available yet
 - assigned strategy profile id: {profile_id}
 - assigned strategy profile: {profile_text}
@@ -538,15 +592,13 @@ Task:
 - Do not copy a generic template unchanged.
 - The submitted code should be meaningfully different from the starter and should reflect the assigned profile.
 - Editable target:
-  - Open and edit the exact absolute target file: `{editable_target}`.
+  - Open and edit exactly: `submission/main.py`.
+  - This path is relative to the per-run codebase workspace.
   - This is the only submission source file whose changes will be collected by the runner.
-  - Do not edit workspace-root `submission/main.py`.
-  - Do not edit `submission/main.py` unless your tool is already operating inside `{codebase_post_t_dir}`.
-  - Do not edit `codebase_post_t/submission/main.py` relative to the OpenClaw workspace root.
+  - First read `submission/main.py`, then edit or rewrite it.
+  - If the edit tool fails because oldText does not match, use the write tool to overwrite `submission/main.py` with a complete valid file.
+  - Do not finish until `submission/main.py` has actually changed.
   - Do not edit notes, audit files, README, scripts, tests, configs, or metadata instead.
-  - First read the exact target file, then edit or rewrite that exact target file.
-  - If the edit tool fails because oldText does not match, use the write tool to overwrite the exact absolute target file with a complete valid `submission/main.py`.
-  - Do not finish until the exact target file has actually changed.
 - Keep the public agent API unchanged and runnable.
 - Implement a deterministic, survivable, non-passive strategy.
 """
@@ -711,6 +763,31 @@ def _cleanup_minimal_workspace_forbidden_files(minimal_workspace: Path) -> None:
         state_path.unlink(missing_ok=True)
 
 
+def _find_misplaced_submission_paths(
+    *,
+    run_id: str,
+    minimal_workspace: Path,
+    run_codebase_post_t: Path,
+) -> list[str]:
+    intended = (run_codebase_post_t / "submission" / "main.py").resolve()
+    candidates = [
+        minimal_workspace / "submission" / "main.py",
+        Path("/root/autodl-tmp/runtime_eval_runs") / run_id / "codebase_post_t" / "submission" / "main.py",
+    ]
+    found: list[str] = []
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate.absolute()
+        if resolved == intended:
+            continue
+        found.append(str(resolved))
+    return sorted(set(found))
+
+
 def _run_submission_contract_validation(codebase_post_t_dir: Path) -> tuple[bool, str]:
     smoke_path = codebase_post_t_dir / "tests" / "smoke.sh"
     if not smoke_path.exists():
@@ -842,10 +919,12 @@ def main() -> None:
     disallowed_changed_files: list[str] = []
     original_changed_unexpectedly: list[str] = []
     wrong_root_submission_changes: list[str] = []
+    misplaced_submission_paths: list[str] = []
     run_dir_file_list_before_cleanup: list[str] = []
     system_prompt_report: dict[str, Any] | None = None
     audit: dict[str, Any] = {}
     audit_warnings: list[str] = []
+    preserve_run_dir = False
     previous_winner: str | None = None
     timeout_seconds = OPENCLAW_TIMEOUT_SECONDS + 30
     context_overflow_detected = False
@@ -871,6 +950,7 @@ def main() -> None:
         openclaw_session_config_path, openclaw_isolation_warnings = _seed_isolated_openclaw_state(
             isolated_state_dir=openclaw_session_state_dir,
             agent_id=agent_id,
+            workspace_dir=run_codebase_post_t,
         )
         openclaw_session_isolated = True
 
@@ -938,6 +1018,12 @@ def main() -> None:
             before_wrong_root_submission_snapshot,
             after_wrong_root_submission_snapshot,
         )
+        if not copy_back_changed_files:
+            misplaced_submission_paths = _find_misplaced_submission_paths(
+                run_id=run_id,
+                minimal_workspace=minimal_workspace,
+                run_codebase_post_t=run_codebase_post_t,
+            )
 
         if original_changed_unexpectedly:
             # Restore fail-closed if OpenClaw touched original files directly.
@@ -945,7 +1031,7 @@ def main() -> None:
                 shutil.rmtree(codebase_post_dir)
             shutil.copytree(run_backup_original, codebase_post_dir)
 
-        audit = _audit_openclaw_response(response, minimal_workspace=minimal_workspace)
+        audit = _audit_openclaw_response(response, minimal_workspace=run_codebase_post_t)
         meta = (response or {}).get("meta", {}) if isinstance(response, dict) else {}
         if isinstance(meta, dict) and isinstance(meta.get("systemPromptReport"), dict):
             system_prompt_report = meta.get("systemPromptReport")
@@ -977,6 +1063,10 @@ def main() -> None:
             msg = "OpenClaw may have edited workspace-root submission/main.py instead of the per-run codebase_post_t target."
             audit_warnings.append(msg)
             errors.append(msg)
+        if misplaced_submission_paths:
+            msg = "OpenClaw may have edited a misplaced submission/main.py outside the per-run codebase workspace."
+            audit_warnings.append(msg)
+            errors.append(msg)
         if not errors and args.game == "pommerman_1v1":
             contract_ok, contract_msg = _run_submission_contract_validation(run_codebase_post_t)
             submission_contract_validation = {
@@ -1000,6 +1090,7 @@ def main() -> None:
             )
 
         changed = success and len(copy_back_changed_files) > 0
+        preserve_run_dir = (not success) or (not changed)
 
         run_dir_file_list_before_cleanup = _list_files(run_dir)
 
@@ -1035,6 +1126,7 @@ def main() -> None:
             "feedbackCopyPath": str(run_feedback_copy) if feedback_path is not None else None,
             "codebasePostDir": str(codebase_post_dir),
             "codebasePostTempDir": str(run_codebase_post_t),
+            "openclawWorkspaceDir": str(run_codebase_post_t),
             "feedbackRound": feedback_data.get("meta", {}).get("round_idx") if isinstance(feedback_data, dict) else None,
             "previousWinner": previous_winner,
             "scorecard": feedback_data.get("scorecard", {}) if isinstance(feedback_data, dict) else {},
@@ -1052,10 +1144,12 @@ def main() -> None:
             "allowedChangedFiles": sorted(ALLOWED_CHANGED_FILES),
             "changedFilesTemp": changed_files_temp,
             "wrongRootSubmissionChanges": wrong_root_submission_changes,
+            "misplacedSubmissionPaths": misplaced_submission_paths,
             "ignoredChangedFiles": ignored_changed_files,
             "disallowedChangedFiles": disallowed_changed_files,
             "originalChangedUnexpectedly": original_changed_unexpectedly,
             "changedFiles": copy_back_changed_files if success else [],
+            "runDirPreserved": preserve_run_dir,
             "runDirFileListBeforeCleanup": run_dir_file_list_before_cleanup,
         }
         _write_audit(audit_path, final_audit)
@@ -1091,7 +1185,10 @@ def main() -> None:
             "audit_errors": errors,
             "ignored_changed_files": ignored_changed_files,
             "wrong_root_submission_changes": wrong_root_submission_changes,
+            "misplaced_submission_paths": misplaced_submission_paths,
             "changed_files_temp": changed_files_temp,
+            "run_dir": str(run_dir),
+            "run_dir_preserved": preserve_run_dir,
             "previous_winner": previous_winner,
             "error": "; ".join(errors) if errors else None,
         }
@@ -1100,6 +1197,7 @@ def main() -> None:
 
     except Exception as exc:
         # Fail closed on exceptions; do not copy any temporary edits back.
+        preserve_run_dir = True
         run_dir_file_list_before_cleanup = _list_files(run_dir)
         final_audit = {
             "executor": "openclaw-minimal",
@@ -1130,6 +1228,7 @@ def main() -> None:
             "previousWinner": previous_winner,
             "codebasePostDir": str(codebase_post_dir),
             "changedFiles": [],
+            "runDirPreserved": preserve_run_dir,
             "runDirFileListBeforeCleanup": run_dir_file_list_before_cleanup,
         }
         _write_audit(audit_path, final_audit)
@@ -1165,6 +1264,8 @@ def main() -> None:
                     "openclaw_default_missing_placeholders": [],
                     "audit_warnings": [],
                     "audit_errors": [repr(exc)],
+                    "run_dir": str(run_dir),
+                    "run_dir_preserved": preserve_run_dir,
                     "previous_winner": previous_winner,
                     "error": repr(exc),
                 },
@@ -1174,7 +1275,7 @@ def main() -> None:
         return
     finally:
         _cleanup_minimal_workspace_forbidden_files(minimal_workspace)
-        if run_dir.exists():
+        if run_dir.exists() and not preserve_run_dir:
             shutil.rmtree(run_dir, ignore_errors=True)
 
 

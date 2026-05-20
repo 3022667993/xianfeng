@@ -1,4 +1,5 @@
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -33,11 +34,11 @@ def _mk_response(model_token: str = "test-model") -> dict:
     }
 
 
-def _mutate_from_message(message: str, mutator) -> None:
-    marker = "- codebase_post_t_dir: "
-    line = next((ln for ln in message.splitlines() if ln.startswith(marker)), None)
-    assert line is not None
-    codebase_post_t_dir = Path(line[len(marker):].strip())
+def _mutate_from_session_config(session_config_path: Path | None, mutator) -> None:
+    assert session_config_path is not None
+    config = json.loads(session_config_path.read_text(encoding="utf-8"))
+    agent = next(entry for entry in config["agents"]["list"] if entry["id"] == "main")
+    codebase_post_t_dir = Path(agent["workspace"])
     mutator(codebase_post_t_dir)
 
 
@@ -56,7 +57,8 @@ def _run_main_with_mutation(tmp_path: Path, monkeypatch, mutator):
         _ = session_id
         _ = session_state_dir
         _ = session_config_path
-        _mutate_from_message(message, mutator)
+        _ = message
+        _mutate_from_session_config(session_config_path, mutator)
         return _mk_response(), "", "", 0
 
     monkeypatch.setattr(ocm, "_run_openclaw_agent", fake_run_openclaw_agent)
@@ -90,6 +92,9 @@ def _run_main_with_mutation(tmp_path: Path, monkeypatch, mutator):
     )
     ocm.main()
     audit = json.loads((codebase_post_dir / "revision_audit.json").read_text(encoding="utf-8"))
+    run_dir = Path(audit["runDir"])
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
     return codebase_post_dir, audit
 
 
