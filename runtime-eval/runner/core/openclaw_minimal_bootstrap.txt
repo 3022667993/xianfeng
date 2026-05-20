@@ -17,7 +17,7 @@ Allowed inputs:
 - this bootstrap file
 
 Allowed edits:
-- only codebase_post_t/submission/main.py
+- only the per-run codebase_post_t submission file shown in the task prompt
 
 Task:
 - follow the prompt instructions for the current OpenClaw run

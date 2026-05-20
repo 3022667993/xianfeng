@@ -1069,7 +1069,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                     failure_reason = "openclaw context overflow"
                 elif require_effective_initial_submission_change and not effective_initial_changed:
                     initial_synthesis_ok = False
-                    failure_reason = "OpenClaw initial synthesis made no effective submission/main.py change"
+                    failure_reason = "OpenClaw completed but did not modify the runner-tracked codebase_post_t/submission/main.py."
                 elif any(isinstance(err, str) and "openclaw timeout" in err for err in audit_errors):
                     initial_synthesis_ok = False
                     failure_reason = "openclaw timeout"
@@ -1588,7 +1588,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                 revision_status = "ok" if rev_ok else "failed"
                 if failure_reason is None:
                     failure_reason = None if rev_ok else rev_msg
-                no_effect_msg = "OpenClaw revision made no effective submission/main.py change"
+                no_effect_msg = "OpenClaw completed but did not modify the runner-tracked codebase_post_t/submission/main.py."
                 if require_effective_submission_change and ((rev_ok and not effective_change) or (not rev_ok and rev_msg == no_effect_msg)):
                     revision_status = "no_effect"
                     rev_ok = False

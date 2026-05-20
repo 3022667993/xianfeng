@@ -399,6 +399,7 @@ def _make_revision_message(
     else:
         feedback_package_task_line = "- feedback package: unavailable\n"
     feedback_package_line = f"- feedback_package_path: {feedback_package_path}" if feedback_package_path is not None else "- feedback_package_path: unavailable"
+    editable_target = codebase_post_t_dir / "submission/main.py"
     prefix = f"""You are OpenClaw-Minimal running inside a controlled runtime-eval revision executor.
 
 IMPORTANT:
@@ -423,17 +424,24 @@ Bootstrap contract:
 Task:
 {feedback_copy_line}{feedback_package_task_line}- Inspect the provided feedback package and the current codebase state.
 {extra_artifacts_block}- Do not rely on a long list of internal artifact paths.
-- Inspect bot code at: {codebase_post_t_dir / "submission/main.py"}
 - For Pommerman A00, revise the bot based on the feedback.
-- Only modify: {codebase_post_t_dir / "submission/main.py"}
-- Do not modify: {codebase_post_t_dir / "notes/revision_log.md"}
+- Editable target:
+  - Open and edit the exact absolute target file: `{editable_target}`.
+  - This is the only submission source file whose changes will be collected by the runner.
+  - Do not edit workspace-root `submission/main.py`.
+  - Do not edit `submission/main.py` unless your tool is already operating inside `{codebase_post_t_dir}`.
+  - Do not edit `codebase_post_t/submission/main.py` relative to the OpenClaw workspace root.
+  - Do not edit notes, audit files, README, scripts, tests, configs, or metadata instead.
+  - First read the exact target file, then edit or rewrite that exact target file.
+  - If the edit tool fails because oldText does not match, use the write tool to overwrite the exact absolute target file with a complete valid `submission/main.py`.
+  - Do not finish until the exact target file has actually changed.
 - The runner will write revision_log.md separately.
 - Do not create or modify any other file.
 - You must modify submission/main.py; metadata-only edits do not count.
 - notes/revision_log.md alone does not count as a valid revision.
 - Keep submission runnable.
 - Make a small, concrete strategy change based on feedback.
-- Preserve `make_agent()` and `pommerman.agents.BaseAgent` inheritance.
+- Preserve `from pommerman import agents`, `make_agent()`, and `pommerman.agents.BaseAgent` inheritance.
 - The submission will be tested on real Pommerman observations containing NumPy arrays; do not treat NumPy arrays as booleans.
 - Do not assume `obs["agent_id"]` exists; use `self.agent_id` when needed.
 - If observation parsing fails, return a valid fallback action in `[0, 5]`.
@@ -494,6 +502,7 @@ def _make_initial_synthesis_message(
         )
     profile_id = strategy_profile_id or "default_profile"
     profile_text = strategy_profile_text or "balanced survivability and safe progression"
+    editable_target = codebase_post_t_dir / "submission/main.py"
     prefix = f"""You are OpenClaw-Minimal running inside a controlled runtime-eval initial synthesis executor.
 
 IMPORTANT:
@@ -522,14 +531,22 @@ Task:
 - The required API includes `make_agent()` returning an instance of a class that subclasses `pommerman.agents.BaseAgent`.
 - This agent has a distinct assigned strategy profile.
 - Replace the minimal fallback with a concrete strategy or behavior implementation in submission/main.py.
-- Preserve a valid `make_agent()` entry point and `pommerman.agents.BaseAgent` inheritance.
+- Preserve `from pommerman import agents`, a valid `make_agent()` entry point, and `pommerman.agents.BaseAgent` inheritance.
 - The submission will be tested on real Pommerman observations containing NumPy arrays; do not treat NumPy arrays as booleans.
 - Do not assume `obs["agent_id"]` exists; use `self.agent_id` when needed.
 - If observation parsing fails, return a valid fallback action in `[0, 5]`.
 - Do not copy a generic template unchanged.
 - The submitted code should be meaningfully different from the starter and should reflect the assigned profile.
-- Inspect bot code at: {codebase_post_t_dir / "submission/main.py"}
-- Only modify: {codebase_post_t_dir / "submission/main.py"}
+- Editable target:
+  - Open and edit the exact absolute target file: `{editable_target}`.
+  - This is the only submission source file whose changes will be collected by the runner.
+  - Do not edit workspace-root `submission/main.py`.
+  - Do not edit `submission/main.py` unless your tool is already operating inside `{codebase_post_t_dir}`.
+  - Do not edit `codebase_post_t/submission/main.py` relative to the OpenClaw workspace root.
+  - Do not edit notes, audit files, README, scripts, tests, configs, or metadata instead.
+  - First read the exact target file, then edit or rewrite that exact target file.
+  - If the edit tool fails because oldText does not match, use the write tool to overwrite the exact absolute target file with a complete valid `submission/main.py`.
+  - Do not finish until the exact target file has actually changed.
 - Keep the public agent API unchanged and runnable.
 - Implement a deterministic, survivable, non-passive strategy.
 """
@@ -778,12 +795,17 @@ def main() -> None:
     codebase_post_dir = Path(args.codebase_post_dir).resolve()
     feedback_path = Path(args.feedback_path).resolve() if args.feedback_path else None
     minimal_workspace = Path("/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal")
+    wrong_root_submission_dir = minimal_workspace / "submission"
     runtime_runs_root = minimal_workspace / "runtime_eval_runs"
 
     audit_path = codebase_post_dir / "revision_audit.json"
 
     runtime_runs_root.mkdir(parents=True, exist_ok=True)
     _cleanup_minimal_workspace_forbidden_files(minimal_workspace)
+    if wrong_root_submission_dir.is_dir():
+        shutil.rmtree(wrong_root_submission_dir)
+    elif wrong_root_submission_dir.exists():
+        wrong_root_submission_dir.unlink()
 
     run_id = f"{int(started_at)}_{os.getpid()}_{hashlib.sha256(str(time.time_ns()).encode('utf-8')).hexdigest()[:10]}"
     agent_id = str(args.agent_id).strip() or "main"
@@ -819,9 +841,11 @@ def main() -> None:
     ignored_changed_files: list[str] = []
     disallowed_changed_files: list[str] = []
     original_changed_unexpectedly: list[str] = []
+    wrong_root_submission_changes: list[str] = []
     run_dir_file_list_before_cleanup: list[str] = []
     system_prompt_report: dict[str, Any] | None = None
     audit: dict[str, Any] = {}
+    audit_warnings: list[str] = []
     previous_winner: str | None = None
     timeout_seconds = OPENCLAW_TIMEOUT_SECONDS + 30
     context_overflow_detected = False
@@ -852,6 +876,7 @@ def main() -> None:
 
         before_temp_snapshot = _snapshot_files(run_codebase_post_t)
         before_original_snapshot = _snapshot_files(codebase_post_dir)
+        before_wrong_root_submission_snapshot = _snapshot_files(wrong_root_submission_dir)
 
         if args.mode == "initial_synthesis":
             message = _make_initial_synthesis_message(
@@ -908,6 +933,11 @@ def main() -> None:
 
         after_original_snapshot = _snapshot_files(codebase_post_dir)
         original_changed_unexpectedly = _changed_files(before_original_snapshot, after_original_snapshot)
+        after_wrong_root_submission_snapshot = _snapshot_files(wrong_root_submission_dir)
+        wrong_root_submission_changes = _changed_files(
+            before_wrong_root_submission_snapshot,
+            after_wrong_root_submission_snapshot,
+        )
 
         if original_changed_unexpectedly:
             # Restore fail-closed if OpenClaw touched original files directly.
@@ -943,6 +973,10 @@ def main() -> None:
             errors.append("disallowed changed files present")
         if original_changed_unexpectedly:
             errors.append("original codebase_post_dir changed unexpectedly during isolated run")
+        if wrong_root_submission_changes:
+            msg = "OpenClaw may have edited workspace-root submission/main.py instead of the per-run codebase_post_t target."
+            audit_warnings.append(msg)
+            errors.append(msg)
         if not errors and args.game == "pommerman_1v1":
             contract_ok, contract_msg = _run_submission_contract_validation(run_codebase_post_t)
             submission_contract_validation = {
@@ -1014,8 +1048,10 @@ def main() -> None:
             "openclawAudit": audit,
             "openclawDefaultMissingPlaceholders": audit.get("openclawDefaultMissingPlaceholders", []),
             "submissionContractValidation": submission_contract_validation,
+            "auditWarnings": audit_warnings,
             "allowedChangedFiles": sorted(ALLOWED_CHANGED_FILES),
             "changedFilesTemp": changed_files_temp,
+            "wrongRootSubmissionChanges": wrong_root_submission_changes,
             "ignoredChangedFiles": ignored_changed_files,
             "disallowedChangedFiles": disallowed_changed_files,
             "originalChangedUnexpectedly": original_changed_unexpectedly,
@@ -1051,9 +1087,10 @@ def main() -> None:
             "prompt_budget_before_reserve": prompt_budget_before_reserve,
             "openclaw_default_missing_placeholders": audit.get("openclawDefaultMissingPlaceholders", []),
             "submission_contract_validation": submission_contract_validation,
-            "audit_warnings": [],
+            "audit_warnings": audit_warnings,
             "audit_errors": errors,
             "ignored_changed_files": ignored_changed_files,
+            "wrong_root_submission_changes": wrong_root_submission_changes,
             "changed_files_temp": changed_files_temp,
             "previous_winner": previous_winner,
             "error": "; ".join(errors) if errors else None,

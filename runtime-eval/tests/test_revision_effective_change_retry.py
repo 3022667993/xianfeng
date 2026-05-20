@@ -36,7 +36,7 @@ def test_require_effective_change_retries_and_fails_when_still_noop(tmp_path, mo
         revision_retry_on_noop=1,
     )
     assert not ok
-    assert "no effective submission/main.py change" in msg
+    assert msg == "OpenClaw completed but did not modify the runner-tracked codebase_post_t/submission/main.py."
     assert calls == [False, True]
 
 
@@ -216,4 +216,31 @@ def test_initial_synthesis_retries_contract_validation_failure_when_retry_budget
     )
     assert ok
     assert "submission/main.py changed" in msg
+    assert calls == [False, True]
+
+
+def test_initial_synthesis_no_effect_returns_runner_tracked_diagnostic(tmp_path, monkeypatch):
+    starter = tmp_path / "starter"
+    post = tmp_path / "post"
+    (starter / "submission").mkdir(parents=True, exist_ok=True)
+    (starter / "submission" / "main.py").write_text("AGGRESSION = 0\n", encoding="utf-8")
+    calls = []
+
+    def fake_apply(*args, **kwargs):
+        calls.append(bool(kwargs.get("retry_on_noop")))
+        return True, "openclaw-minimal initial synthesis applied: AGGRESSION unchanged"
+
+    monkeypatch.setattr(rev, "_apply_openclaw_minimal_initial_synthesis", fake_apply)
+
+    ok, msg = rev.apply_minimal_initial_synthesis(
+        starter,
+        post,
+        model_id="m1",
+        executor="openclaw-minimal",
+        openclaw_agent_id="main",
+        require_effective_submission_change=True,
+        initial_synthesis_retry_on_noop=1,
+    )
+    assert not ok
+    assert msg == "OpenClaw completed but did not modify the runner-tracked codebase_post_t/submission/main.py."
     assert calls == [False, True]

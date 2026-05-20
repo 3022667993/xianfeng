@@ -732,7 +732,7 @@ def apply_minimal_revision(
                 return ok, msg
             if attempt < retries:
                 continue
-        return False, "OpenClaw revision made no effective submission/main.py change"
+        return False, "OpenClaw completed but did not modify the runner-tracked codebase_post_t/submission/main.py."
 
     return _apply_rule_revision(
         submission_main_path=submission_main_path,
@@ -840,7 +840,7 @@ def apply_minimal_initial_synthesis(
             return ok, msg
         if attempt < retries:
             continue
-    return False, "OpenClaw initial synthesis made no effective submission/main.py change"
+    return False, "OpenClaw completed but did not modify the runner-tracked codebase_post_t/submission/main.py."
 
 
 def apply_noop_revision(

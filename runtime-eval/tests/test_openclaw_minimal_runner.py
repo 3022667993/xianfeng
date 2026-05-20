@@ -1,3 +1,6 @@
+import json
+import shutil
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -179,6 +182,18 @@ def test_neutral_revision_message_omits_coached_tactics_but_keeps_constraints():
     assert "Read feedback from" not in msg
     assert "feedback/round_1" in msg
     assert "You must modify submission/main.py" in msg
+    assert "Editable target:" in msg
+    assert "Open and edit the exact absolute target file: `/tmp/run/codebase_post_t/submission/main.py`." in msg
+    assert "This is the only submission source file whose changes will be collected by the runner." in msg
+    assert "Do not edit workspace-root `submission/main.py`." in msg
+    assert "Do not edit `submission/main.py` unless your tool is already operating inside `/tmp/run/codebase_post_t`." in msg
+    assert "Do not edit `codebase_post_t/submission/main.py` relative to the OpenClaw workspace root." in msg
+    assert "First read the exact target file, then edit or rewrite that exact target file." in msg
+    assert "If the edit tool fails because oldText does not match, use the write tool" in msg
+    assert "Do not finish until the exact target file has actually changed." in msg
+    assert "Do not use an absolute path." not in msg
+    assert "Open and edit exactly: `submission/main.py`." not in msg
+    assert "Do not prefix the path with `codebase_post_t/`." not in msg
     assert "Objective: improve expected future tournament outcome under the provided feedback package and constraints." in msg
     assert "feedback package, public scoreboard, match replay evidence, action logs, and run logs as evidence" in msg
     assert "concrete strategy or behavior change" in msg
@@ -192,7 +207,7 @@ def test_neutral_revision_message_omits_coached_tactics_but_keeps_constraints():
     assert "real Pommerman observations containing NumPy arrays" in msg
     assert "do not treat NumPy arrays as booleans" in msg
     assert 'Do not assume `obs["agent_id"]` exists' in msg
-    assert "Preserve `make_agent()` and `pommerman.agents.BaseAgent` inheritance." in msg
+    assert "Preserve `from pommerman import agents`, `make_agent()`, and `pommerman.agents.BaseAgent` inheritance." in msg
     assert "return a valid fallback action in `[0, 5]`" in msg
     assert "Previous attempt made no submitted-code change" in msg
     assert "center when safe" not in msg
@@ -225,7 +240,7 @@ def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_const
     assert "starter `submission/main.py` is intentionally minimal" in msg
     assert "only provides the required API plus a valid fallback action" in msg
     assert "make_agent()` returning an instance of a class that subclasses `pommerman.agents.BaseAgent`" in msg
-    assert "Preserve a valid `make_agent()` entry point and `pommerman.agents.BaseAgent` inheritance." in msg
+    assert "Preserve `from pommerman import agents`, a valid `make_agent()` entry point, and `pommerman.agents.BaseAgent` inheritance." in msg
     assert "Replace the minimal fallback with a concrete strategy or behavior implementation" in msg
     assert "Objective: improve expected future tournament outcome while preserving valid actions" in msg
     assert "Prefer wins over draws, and draws over losses." in msg
@@ -234,6 +249,18 @@ def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_const
     assert "timeout draw is not a strong success signal" in msg
     assert "dummy/background agent" in msg
     assert "Avoid obvious self-destruction and keep the submission valid." in msg
+    assert "Editable target:" in msg
+    assert "Open and edit the exact absolute target file: `/tmp/run/codebase_post_t/submission/main.py`." in msg
+    assert "This is the only submission source file whose changes will be collected by the runner." in msg
+    assert "Do not edit workspace-root `submission/main.py`." in msg
+    assert "Do not edit `submission/main.py` unless your tool is already operating inside `/tmp/run/codebase_post_t`." in msg
+    assert "Do not edit `codebase_post_t/submission/main.py` relative to the OpenClaw workspace root." in msg
+    assert "First read the exact target file, then edit or rewrite that exact target file." in msg
+    assert "If the edit tool fails because oldText does not match, use the write tool" in msg
+    assert "Do not finish until the exact target file has actually changed." in msg
+    assert "Do not use an absolute path." not in msg
+    assert "Open and edit exactly: `submission/main.py`." not in msg
+    assert "Do not prefix the path with `codebase_post_t/`." not in msg
     assert "real Pommerman observations containing NumPy arrays" in msg
     assert "do not treat NumPy arrays as booleans" in msg
     assert 'Do not assume `obs["agent_id"]` exists' in msg
@@ -307,8 +334,84 @@ def test_submission_contract_validation_success_message(monkeypatch, tmp_path):
     assert msg == "submission contract validation passed on real Pommerman observation"
 
 
+def test_wrong_root_submission_edit_fails_closed_with_diagnostic(monkeypatch, tmp_path, capsys):
+    codebase = tmp_path / "codebase_post"
+    (codebase / "submission").mkdir(parents=True)
+    (codebase / "submission" / "main.py").write_text("AGGRESSION = 0\n", encoding="utf-8")
+    (codebase / "notes").mkdir()
+    (codebase / "notes" / "revision_log.md").write_text("# log\n", encoding="utf-8")
+
+    wrong_root = Path("/root/autodl-tmp/runtime-eval/openclaw_workspaces/minimal/submission")
+    if wrong_root.exists():
+        shutil.rmtree(wrong_root)
+
+    def fake_run_openclaw_agent(*args, **kwargs):
+        wrong_root.mkdir(parents=True, exist_ok=True)
+        (wrong_root / "main.py").write_text("AGGRESSION = 1\n", encoding="utf-8")
+        return (
+            {
+                "meta": {
+                    "systemPromptReport": {
+                        "injectedWorkspaceFiles": [],
+                        "tools": {"entries": [{"name": "read"}, {"name": "write"}]},
+                        "skills": {"promptChars": 0},
+                    },
+                    "executionTrace": {
+                        "winnerProvider": "relay",
+                        "winnerModel": "test-model",
+                        "fallbackUsed": False,
+                    },
+                }
+            },
+            "",
+            "",
+            0,
+        )
+
+    monkeypatch.setattr(ocm, "_run_openclaw_agent", fake_run_openclaw_agent)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "openclaw_minimal.py",
+            "--mode",
+            "initial_synthesis",
+            "--bootstrap",
+            str(Path("runner/core/openclaw_minimal_bootstrap.txt").resolve()),
+            "--codebase-post-dir",
+            str(codebase),
+            "--side",
+            "left",
+            "--game",
+            "pommerman_1v1",
+            "--regime",
+            "A00",
+            "--agent-id",
+            "main",
+            "--provider-model",
+            "relay/test-model",
+        ],
+    )
+    try:
+        ocm.main()
+        result = json.loads(capsys.readouterr().out)
+        audit = json.loads((codebase / "revision_audit.json").read_text(encoding="utf-8"))
+        diagnostic = "OpenClaw may have edited workspace-root submission/main.py instead of the per-run codebase_post_t target."
+        assert result["success"] is False
+        assert diagnostic in result["audit_errors"]
+        assert diagnostic in result["audit_warnings"]
+        assert diagnostic in audit["errors"]
+        assert audit["wrongRootSubmissionChanges"] == ["main.py"]
+        assert audit["changedFiles"] == []
+    finally:
+        if wrong_root.exists():
+            shutil.rmtree(wrong_root)
+
+
 def test_bootstrap_file_no_longer_contains_stale_aggression_task():
     bootstrap = Path("runner/core/openclaw_minimal_bootstrap.txt").read_text(encoding="utf-8")
     assert "toggle AGGRESSION between 0 and 1" not in bootstrap
     assert "scorecard.left_right_winner" not in bootstrap
     assert "append/update codebase_post_t/notes/revision_log.md" not in bootstrap
+    assert "only the per-run codebase_post_t submission file shown in the task prompt" in bootstrap
+    assert "only codebase_post_t/submission/main.py" not in bootstrap
