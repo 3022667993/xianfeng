@@ -24,3 +24,10 @@ def test_pommerman_run_match_smoke(tmp_path):
     assert "environment_winner_labels" in scorecard
     assert "submitted_pair_outcome" in scorecard
     assert "draw_type" in scorecard
+    assert scorecard["seat_assignment"] == {
+        "seat_0_submission": "left",
+        "seat_1_submission": "right",
+        "seat_2_submission": "dummy2",
+        "seat_3_submission": "dummy3",
+    }
+    assert scorecard["background_agents"] == ["dummy2", "dummy3"]

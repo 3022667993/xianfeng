@@ -118,6 +118,15 @@ def test_starter_readme_documents_baseagent_contract():
     assert "act(...)` returns one integer action in `[0, 5]`" in readme
 
 
+def test_starter_readme_documents_passive_background_dummies():
+    readme = Path("starter_repos/pommerman_1v1/README.md").read_text(encoding="utf-8").lower()
+    assert "dummy2       = passive background dummy" in readme
+    assert "dummy3       = passive background dummy" in readme
+    assert "background dummy agents exist to satisfy the four-agent ffa environment" in readme
+    assert "background dummy agents are passive" in readme
+    assert "not intended as competitive opponents" in readme
+
+
 def test_starter_readme_documents_observation_api_pitfalls():
     readme = Path("starter_repos/pommerman_1v1/README.md").read_text(encoding="utf-8")
     lower = readme.lower()

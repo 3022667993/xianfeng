@@ -329,6 +329,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                 "left_submission": str(left_submission),
                 "right_submission": str(right_submission),
                 "seat_assignment": seat_assignment,
+                "background_agents": ["dummy2", "dummy3"],
                 "left_right_winner": "draw",
                 "steps": 0,
                 "done": False,
@@ -393,6 +394,7 @@ class Pommerman1v1Adapter(BaseGameAdapter):
                     "seat_2_submission": "dummy2",
                     "seat_3_submission": "dummy3",
                 }
+                arena_payload_match_a["background_agents"] = ["dummy2", "dummy3"]
                 arena_payload_match_a["requested_seed"] = req_a
                 arena_payload_match_a["applied_seed"] = app_a
                 arena_payload_match_a["seed"] = seed_a

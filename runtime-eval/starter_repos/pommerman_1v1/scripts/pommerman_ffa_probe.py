@@ -25,6 +25,11 @@ from seed_control import apply_env_seed, apply_pre_env_seed
 RECORD_AGENT_LABELS = ["left", "right", "dummy2", "dummy3"]
 
 
+class PassiveDummyAgent(agents.BaseAgent):
+    def act(self, obs, action_space=None):
+        return 0
+
+
 def to_jsonable(x):
     if isinstance(x, dict):
         return {k: to_jsonable(v) for k, v in x.items()}
@@ -215,8 +220,8 @@ def main():
     agent_list = [
         left_agent,
         right_agent,
-        agents.SimpleAgent(),
-        agents.SimpleAgent(),
+        PassiveDummyAgent(),
+        PassiveDummyAgent(),
     ]
 
     env = _make_env(env_id, agent_list, record_json_dir)
@@ -308,6 +313,7 @@ def main():
             "left_right_winner": lr_winner,
             "left_submission": str(left_main),
             "right_submission": str(right_main),
+            "background_agents": ["dummy2", "dummy3"],
             "requested_seed": seed_provenance.get("requested_seed"),
             "applied_seed": applied_seed,
             "seed": seed_provenance.get("seed"),
