@@ -1,7 +1,7 @@
 models:
-  - id: relay_gpt_4_1_mini
-    agent_id: relay_gpt_4_1_mini
-    provider_model: relay/gpt-4.1-mini
+  - id: relay_glm_4_6
+    agent_id: relay_glm_4_6
+    provider_model: glm-4.6
     executor: openclaw-minimal
     stratum: mid
 
