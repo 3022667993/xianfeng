@@ -440,6 +440,8 @@ def _apply_openclaw_minimal_revision(
     if context_overflow_error:
         return False, "openclaw context overflow"
     if not success:
+        if error_text:
+            return False, f"openclaw-minimal revision failed: {error_text}"
         return False, "openclaw-minimal revision failed: unsuccessful result"
     if changed:
         if isinstance(old_aggression, int) and isinstance(new_aggression, int):
@@ -583,6 +585,8 @@ def _apply_openclaw_minimal_initial_synthesis(
     if context_overflow_error:
         return False, "openclaw context overflow"
     if not success:
+        if error_text:
+            return False, f"openclaw-minimal initial synthesis failed: {error_text}"
         return False, "openclaw-minimal initial synthesis failed: unsuccessful result"
     if changed:
         if isinstance(old_aggression, int) and isinstance(new_aggression, int):
@@ -718,6 +722,8 @@ def apply_minimal_revision(
                 msg_l = msg.lower()
                 if ("timeout" in msg_l or "context overflow" in msg_l) and attempt < timeout_retries:
                     continue
+                if "submission contract validation failed" in msg_l and attempt < retries:
+                    continue
                 return ok, msg
             if not require_effective_submission_change:
                 return ok, msg
@@ -823,6 +829,8 @@ def apply_minimal_initial_synthesis(
         if not ok:
             msg_l = msg.lower()
             if ("timeout" in msg_l or "context overflow" in msg_l) and attempt < timeout_retries:
+                continue
+            if "submission contract validation failed" in msg_l and attempt < retries:
                 continue
             return ok, msg
         if not require_effective_submission_change:

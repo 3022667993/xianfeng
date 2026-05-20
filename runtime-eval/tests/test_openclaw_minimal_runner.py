@@ -189,6 +189,11 @@ def test_neutral_revision_message_omits_coached_tactics_but_keeps_constraints():
     assert "`submitted_pair_outcome`" in msg
     assert "dummy/background agent" in msg
     assert "feedback package is evidence, not a hand-authored strategy script" in msg
+    assert "real Pommerman observations containing NumPy arrays" in msg
+    assert "do not treat NumPy arrays as booleans" in msg
+    assert 'Do not assume `obs["agent_id"]` exists' in msg
+    assert "Preserve `make_agent()` and `pommerman.agents.BaseAgent` inheritance." in msg
+    assert "return a valid fallback action in `[0, 5]`" in msg
     assert "Previous attempt made no submitted-code change" in msg
     assert "center when safe" not in msg
     assert "center movement" not in msg
@@ -229,6 +234,10 @@ def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_const
     assert "timeout draw is not a strong success signal" in msg
     assert "dummy/background agent" in msg
     assert "Avoid obvious self-destruction and keep the submission valid." in msg
+    assert "real Pommerman observations containing NumPy arrays" in msg
+    assert "do not treat NumPy arrays as booleans" in msg
+    assert 'Do not assume `obs["agent_id"]` exists' in msg
+    assert "return a valid fallback action in `[0, 5]`" in msg
     assert "You must edit submission/main.py." in msg
     assert "Do not modify scripts/run_arena.sh, scripts/build.sh, tests, configs, or metadata files." in msg
     assert "center when safe" not in msg
@@ -261,6 +270,41 @@ def test_initial_synthesis_message_does_not_reference_feedback_package_paths():
     assert "feedback/round_" not in msg
     assert "agent_feedback_" not in msg
     assert "trajectory_summary.json" not in msg
+
+
+def test_submission_contract_validation_reports_real_observation_failures(monkeypatch, tmp_path):
+    codebase = tmp_path / "codebase_post_t"
+    (codebase / "tests").mkdir(parents=True)
+    (codebase / "tests" / "smoke.sh").write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+
+    def fake_run(*args, **kwargs):
+        return _Proc(
+            returncode=1,
+            stdout="",
+            stderr="ValueError: The truth value of a numpy array with more than one element is ambiguous",
+        )
+
+    monkeypatch.setattr(ocm.subprocess, "run", fake_run)
+
+    ok, msg = ocm._run_submission_contract_validation(codebase)
+    assert not ok
+    assert "submission contract validation failed on real Pommerman observation" in msg
+    assert "truth value of a numpy array" in msg
+
+
+def test_submission_contract_validation_success_message(monkeypatch, tmp_path):
+    codebase = tmp_path / "codebase_post_t"
+    (codebase / "tests").mkdir(parents=True)
+    (codebase / "tests" / "smoke.sh").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+
+    def fake_run(*args, **kwargs):
+        return _Proc(returncode=0, stdout="[smoke] starter repo contract OK", stderr="")
+
+    monkeypatch.setattr(ocm.subprocess, "run", fake_run)
+
+    ok, msg = ocm._run_submission_contract_validation(codebase)
+    assert ok
+    assert msg == "submission contract validation passed on real Pommerman observation"
 
 
 def test_bootstrap_file_no_longer_contains_stale_aggression_task():

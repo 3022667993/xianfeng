@@ -61,6 +61,11 @@ def _run_main_with_mutation(tmp_path: Path, monkeypatch, mutator):
 
     monkeypatch.setattr(ocm, "_run_openclaw_agent", fake_run_openclaw_agent)
     monkeypatch.setattr(
+        ocm,
+        "_run_submission_contract_validation",
+        lambda _codebase_post_t_dir: (True, "submission contract validation passed on real Pommerman observation"),
+    )
+    monkeypatch.setattr(
         sys,
         "argv",
         [

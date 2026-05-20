@@ -433,6 +433,10 @@ Task:
 - notes/revision_log.md alone does not count as a valid revision.
 - Keep submission runnable.
 - Make a small, concrete strategy change based on feedback.
+- Preserve `make_agent()` and `pommerman.agents.BaseAgent` inheritance.
+- The submission will be tested on real Pommerman observations containing NumPy arrays; do not treat NumPy arrays as booleans.
+- Do not assume `obs["agent_id"]` exists; use `self.agent_id` when needed.
+- If observation parsing fails, return a valid fallback action in `[0, 5]`.
 """
     if prompt_variant == "anti_draw_coached":
         variant_block = """- Treat 800-step draw outcomes as a failure signal.
@@ -519,6 +523,9 @@ Task:
 - This agent has a distinct assigned strategy profile.
 - Replace the minimal fallback with a concrete strategy or behavior implementation in submission/main.py.
 - Preserve a valid `make_agent()` entry point and `pommerman.agents.BaseAgent` inheritance.
+- The submission will be tested on real Pommerman observations containing NumPy arrays; do not treat NumPy arrays as booleans.
+- Do not assume `obs["agent_id"]` exists; use `self.agent_id` when needed.
+- If observation parsing fails, return a valid fallback action in `[0, 5]`.
 - Do not copy a generic template unchanged.
 - The submitted code should be meaningfully different from the starter and should reflect the assigned profile.
 - Inspect bot code at: {codebase_post_t_dir / "submission/main.py"}
@@ -687,6 +694,30 @@ def _cleanup_minimal_workspace_forbidden_files(minimal_workspace: Path) -> None:
         state_path.unlink(missing_ok=True)
 
 
+def _run_submission_contract_validation(codebase_post_t_dir: Path) -> tuple[bool, str]:
+    smoke_path = codebase_post_t_dir / "tests" / "smoke.sh"
+    if not smoke_path.exists():
+        return False, "submission contract validation failed on real Pommerman observation: tests/smoke.sh missing"
+    try:
+        proc = subprocess.run(
+            ["bash", "tests/smoke.sh"],
+            cwd=codebase_post_t_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=180,
+        )
+    except TimeoutExpired as exc:
+        stderr = exc.stderr or ""
+        stdout = exc.stdout or ""
+        detail = (stderr or stdout or "timeout").strip()
+        return False, f"submission contract validation failed on real Pommerman observation: timeout: {detail[-1000:]}"
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or f"returncode={proc.returncode}").strip()
+        return False, f"submission contract validation failed on real Pommerman observation: {detail[-2000:]}"
+    return True, "submission contract validation passed on real Pommerman observation"
+
+
 def _list_files(root: Path) -> list[str]:
     if not root.exists():
         return []
@@ -796,6 +827,7 @@ def main() -> None:
     context_overflow_detected = False
     prompt_estimated_tokens: int | None = None
     prompt_budget_before_reserve: int | None = None
+    submission_contract_validation: dict[str, Any] | None = None
 
     try:
         bootstrap_text = bootstrap_path.read_text(encoding="utf-8")
@@ -911,6 +943,14 @@ def main() -> None:
             errors.append("disallowed changed files present")
         if original_changed_unexpectedly:
             errors.append("original codebase_post_dir changed unexpectedly during isolated run")
+        if not errors and args.game == "pommerman_1v1":
+            contract_ok, contract_msg = _run_submission_contract_validation(run_codebase_post_t)
+            submission_contract_validation = {
+                "ok": contract_ok,
+                "message": contract_msg,
+            }
+            if not contract_ok:
+                errors.append(contract_msg)
 
         provider_route_status, actual_provider, actual_model = _provider_route_status(
             provider_model,
@@ -973,6 +1013,7 @@ def main() -> None:
             "systemPromptReport": system_prompt_report,
             "openclawAudit": audit,
             "openclawDefaultMissingPlaceholders": audit.get("openclawDefaultMissingPlaceholders", []),
+            "submissionContractValidation": submission_contract_validation,
             "allowedChangedFiles": sorted(ALLOWED_CHANGED_FILES),
             "changedFilesTemp": changed_files_temp,
             "ignoredChangedFiles": ignored_changed_files,
@@ -1009,6 +1050,7 @@ def main() -> None:
             "prompt_estimated_tokens": prompt_estimated_tokens,
             "prompt_budget_before_reserve": prompt_budget_before_reserve,
             "openclaw_default_missing_placeholders": audit.get("openclawDefaultMissingPlaceholders", []),
+            "submission_contract_validation": submission_contract_validation,
             "audit_warnings": [],
             "audit_errors": errors,
             "ignored_changed_files": ignored_changed_files,

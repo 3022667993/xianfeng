@@ -149,6 +149,14 @@ Defensive rules:
 * Avoid assuming exact board constants unless helpers define them.
 * Never crash on malformed or partial observations; return a valid fallback action instead.
 
+Observation API pitfalls:
+
+* `obs["board"]`, `obs["bomb_life"]`, `obs["bomb_blast_strength"]`, and similar fields may be NumPy arrays.
+* Do not use NumPy arrays directly as booleans. Avoid `if board:`, `if not board:`, `if board[0]:`, and `if obs["bomb_life"] == 0:`.
+* Use explicit checks such as `board is None`, `len(board)`, `board.shape`, or `.any()` / `.all()` when intentionally reducing boolean arrays.
+* `obs` may not contain `"agent_id"`. If you need your own id, use `self.agent_id` from `pommerman.agents.BaseAgent` when available.
+* If observation parsing fails, return a valid fallback action such as `0`.
+
 ## 7. Coordinate Convention
 
 Pommerman observations commonly use grid coordinates as:

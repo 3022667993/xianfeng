@@ -150,3 +150,70 @@ def test_context_overflow_is_retryable_and_returns_distinct_failure(tmp_path, mo
     assert not ok
     assert msg == "openclaw context overflow"
     assert calls == [False, True]
+
+
+def test_revision_retries_contract_validation_failure_when_retry_budget_exists(tmp_path, monkeypatch):
+    play, post = _mk_play(tmp_path)
+    calls = []
+
+    def fake_apply(*args, **kwargs):
+        calls.append(bool(kwargs.get("retry_on_noop")))
+        if len(calls) == 1:
+            return (
+                False,
+                "openclaw-minimal revision failed: submission contract validation failed on "
+                "real Pommerman observation: ValueError",
+            )
+        kwargs["submission_main_path"].write_text("AGGRESSION = 1\n", encoding="utf-8")
+        return True, "openclaw-minimal revision applied: submission/main.py changed"
+
+    monkeypatch.setattr(rev, "_apply_openclaw_minimal_revision", fake_apply)
+
+    ok, msg = rev.apply_minimal_revision(
+        play,
+        post,
+        2,
+        "left",
+        model_id="m1",
+        executor="openclaw-minimal",
+        openclaw_agent_id="main",
+        require_effective_submission_change=True,
+        revision_retry_on_noop=1,
+    )
+    assert ok
+    assert "submission/main.py changed" in msg
+    assert calls == [False, True]
+
+
+def test_initial_synthesis_retries_contract_validation_failure_when_retry_budget_exists(tmp_path, monkeypatch):
+    starter = tmp_path / "starter"
+    post = tmp_path / "post"
+    (starter / "submission").mkdir(parents=True, exist_ok=True)
+    (starter / "submission" / "main.py").write_text("AGGRESSION = 0\n", encoding="utf-8")
+    calls = []
+
+    def fake_apply(*args, **kwargs):
+        calls.append(bool(kwargs.get("retry_on_noop")))
+        if len(calls) == 1:
+            return (
+                False,
+                "openclaw-minimal initial synthesis failed: submission contract validation failed on "
+                "real Pommerman observation: KeyError: 'agent_id'",
+            )
+        kwargs["submission_main_path"].write_text("AGGRESSION = 1\n", encoding="utf-8")
+        return True, "openclaw-minimal initial synthesis applied: submission/main.py changed"
+
+    monkeypatch.setattr(rev, "_apply_openclaw_minimal_initial_synthesis", fake_apply)
+
+    ok, msg = rev.apply_minimal_initial_synthesis(
+        starter,
+        post,
+        model_id="m1",
+        executor="openclaw-minimal",
+        openclaw_agent_id="main",
+        require_effective_submission_change=True,
+        initial_synthesis_retry_on_noop=1,
+    )
+    assert ok
+    assert "submission/main.py changed" in msg
+    assert calls == [False, True]

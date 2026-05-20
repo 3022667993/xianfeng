@@ -1,5 +1,8 @@
 import ast
 import importlib.util
+import os
+import shutil
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -113,6 +116,76 @@ def test_starter_readme_documents_baseagent_contract():
     assert "from pommerman import agents" in readme
     assert "class Agent(agents.BaseAgent)" in readme
     assert "act(...)` returns one integer action in `[0, 5]`" in readme
+
+
+def test_starter_readme_documents_observation_api_pitfalls():
+    readme = Path("starter_repos/pommerman_1v1/README.md").read_text(encoding="utf-8")
+    lower = readme.lower()
+    assert '`obs["board"]`' in readme
+    assert '`obs["bomb_life"]`' in readme
+    assert "may be NumPy arrays" in readme
+    assert "do not use numpy arrays directly as booleans" in lower
+    assert "`if board:`" in readme
+    assert "`if not board:`" in readme
+    assert "`if board[0]:`" in readme
+    assert '`if obs["bomb_life"] == 0:`' in readme
+    assert '`obs` may not contain `"agent_id"`' in readme
+    assert "`self.agent_id`" in readme
+    assert "return a valid fallback action such as `0`" in readme
+
+
+def _conda_bin_or_skip() -> str:
+    conda_bin = os.environ.get("CONDA_BIN") or str(Path.home() / "miniconda3" / "bin" / "conda")
+    if not Path(conda_bin).exists():
+        pytest.skip("conda binary unavailable for Pommerman starter smoke")
+    return conda_bin
+
+
+def _run_starter_smoke(codebase_dir: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", "tests/smoke.sh"],
+        cwd=codebase_dir,
+        env={**os.environ, "CONDA_BIN": _conda_bin_or_skip()},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=240,
+    )
+
+
+def test_starter_smoke_validates_minimal_baseagent_on_real_observation():
+    proc = _run_starter_smoke(Path("starter_repos/pommerman_1v1"))
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert "[smoke] starter repo contract OK" in proc.stdout
+
+
+def test_starter_smoke_rejects_numpy_truthiness_on_real_observation(tmp_path):
+    src = Path("starter_repos/pommerman_1v1")
+    dst = tmp_path / "bad_codebase"
+    shutil.copytree(src, dst)
+    (dst / "submission" / "main.py").write_text(
+        """from pommerman import agents
+
+
+class Agent(agents.BaseAgent):
+    def act(self, obs, action_space=None):
+        board = obs.get("board")
+        if not board:
+            return 0
+        return 0
+
+
+def make_agent():
+    return Agent()
+""",
+        encoding="utf-8",
+    )
+
+    proc = _run_starter_smoke(dst)
+    combined = f"{proc.stdout}\n{proc.stderr}"
+    assert proc.returncode != 0
+    assert "submission contract validation failed on real Pommerman observation" in combined
+    assert "truth value of an array" in combined or "truth value of a numpy array" in combined
 
 
 def test_starter_baseagent_is_accepted_by_real_pommerman_env():
