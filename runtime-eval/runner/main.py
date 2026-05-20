@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import shutil
@@ -42,6 +43,43 @@ def _safe_progress_value(value):
     if isinstance(value, Path):
         return str(value)
     return str(value)
+
+
+def _openclaw_concurrency(tournament: dict) -> int:
+    raw = tournament.get("openclaw_concurrency", 1)
+    try:
+        concurrency = int(raw)
+    except Exception as exc:
+        raise ValueError(f"openclaw_concurrency must be an integer >= 1, got {raw!r}") from exc
+    if concurrency < 1:
+        raise ValueError(f"openclaw_concurrency must be >= 1, got {concurrency}")
+    return concurrency
+
+
+def _run_ordered_agent_jobs(
+    agent_ids: list[str],
+    worker,
+    *,
+    concurrency: int,
+    stage_name: str,
+) -> list:
+    if concurrency <= 1 or len(agent_ids) <= 1:
+        return [worker(agent_id) for agent_id in agent_ids]
+
+    results_by_agent: dict[str, object] = {}
+    errors_by_agent: dict[str, BaseException] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+        future_by_agent = {executor.submit(worker, agent_id): agent_id for agent_id in agent_ids}
+        for future in concurrent.futures.as_completed(future_by_agent):
+            agent_id = future_by_agent[future]
+            try:
+                results_by_agent[agent_id] = future.result()
+            except BaseException as exc:
+                errors_by_agent[agent_id] = exc
+    if errors_by_agent:
+        reasons = "; ".join(f"{agent_id}:{errors_by_agent[agent_id]!r}" for agent_id in agent_ids if agent_id in errors_by_agent)
+        raise RuntimeError(f"{stage_name} parallel jobs failed: {reasons}")
+    return [results_by_agent[agent_id] for agent_id in agent_ids]
 
 
 def _smoke_requested_seed(tournament: dict) -> int:
@@ -919,6 +957,7 @@ def _run_openclaw_adaptive_smoke_tournament(
     rounds = schedule["rounds"][:num_rounds]
     base_seed = _execution_smoke_base_seed(tournament)
     openclaw_runner_agent_id = str(tournament.get("openclaw_runner_agent_id", "main"))
+    openclaw_concurrency = _openclaw_concurrency(tournament)
     require_effective_submission_change = bool(tournament.get("require_effective_submission_change", False))
     revision_retry_on_noop = int(tournament.get("revision_retry_on_noop", 0) or 0)
     initial_synthesis = bool(tournament.get("initial_synthesis", False))
@@ -972,7 +1011,7 @@ def _run_openclaw_adaptive_smoke_tournament(
         starter_submission_sha256 = _sha256_file(starter_submission_path)
         failed_initial_entries: list[dict] = []
 
-        for agent_id in agent_ids:
+        def _run_initial_synthesis_job(agent_id: str) -> tuple[dict, dict]:
             meta = model_by_agent[agent_id]
             provider_model = meta.get("provider_model")
             executor = initial_synthesis_executor or meta.get("executor")
@@ -1134,44 +1173,51 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "codebase_initial_post_path": str(initial_post),
                 "codebase_play_1_path": str(play_1),
             }
-            initial_manifest_entries.append(initial_entry)
 
             if not initial_synthesis_ok:
-                failed_initial_entries.append(initial_entry)
                 source_submission_sha256 = _sha256_file(initial_post / "submission" / "main.py")
-                initial_round_one_propagation_entries.append(
-                    {
-                        "agent_id": agent_id,
-                        "source_initial_post_path": str(initial_post),
-                        "target_play_path": str(play_1),
-                        "source_round": 0,
-                        "target_round": 1,
-                        "source_submission_sha256": source_submission_sha256,
-                        "target_submission_sha256": None,
-                        "propagation_matches_post": False,
-                        "propagated": False,
-                        "propagation_ok": False,
-                    }
-                )
-                continue
-
-            copy_tree(initial_post, play_1)
-            source_submission_sha256 = _sha256_file(initial_post / "submission" / "main.py")
-            target_submission_sha256 = _sha256_file(play_1 / "submission" / "main.py")
-            initial_round_one_propagation_entries.append(
-                {
+                propagation_entry = {
                     "agent_id": agent_id,
                     "source_initial_post_path": str(initial_post),
                     "target_play_path": str(play_1),
                     "source_round": 0,
                     "target_round": 1,
                     "source_submission_sha256": source_submission_sha256,
-                    "target_submission_sha256": target_submission_sha256,
-                    "propagation_matches_post": source_submission_sha256 == target_submission_sha256,
-                    "propagated": True,
-                    "propagation_ok": source_submission_sha256 == target_submission_sha256,
+                    "target_submission_sha256": None,
+                    "propagation_matches_post": False,
+                    "propagated": False,
+                    "propagation_ok": False,
                 }
-            )
+                return initial_entry, propagation_entry
+
+            copy_tree(initial_post, play_1)
+            source_submission_sha256 = _sha256_file(initial_post / "submission" / "main.py")
+            target_submission_sha256 = _sha256_file(play_1 / "submission" / "main.py")
+            propagation_entry = {
+                "agent_id": agent_id,
+                "source_initial_post_path": str(initial_post),
+                "target_play_path": str(play_1),
+                "source_round": 0,
+                "target_round": 1,
+                "source_submission_sha256": source_submission_sha256,
+                "target_submission_sha256": target_submission_sha256,
+                "propagation_matches_post": source_submission_sha256 == target_submission_sha256,
+                "propagated": True,
+                "propagation_ok": source_submission_sha256 == target_submission_sha256,
+            }
+            return initial_entry, propagation_entry
+
+        initial_results = _run_ordered_agent_jobs(
+            agent_ids,
+            _run_initial_synthesis_job,
+            concurrency=openclaw_concurrency,
+            stage_name="initial synthesis",
+        )
+        for initial_entry, propagation_entry in initial_results:
+            initial_manifest_entries.append(initial_entry)
+            initial_round_one_propagation_entries.append(propagation_entry)
+            if not initial_entry["initial_synthesis_ok"]:
+                failed_initial_entries.append(initial_entry)
 
         write_json(
             Path("logs/initial_synthesis_manifest.json"),
@@ -1181,6 +1227,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "real_openclaw_initial_synthesis": real_openclaw_initial_synthesis,
                 "require_all_agents_initial_synthesized": require_all_agents_initial_synthesized,
                 "require_effective_initial_submission_change": require_effective_initial_submission_change,
+                "openclaw_concurrency": openclaw_concurrency,
                 "initial_synthesis_retry_on_noop": initial_synthesis_retry_on_noop,
                 "initial_synthesis_retry_on_route_unknown": initial_synthesis_retry_on_route_unknown,
                 "agents": initial_manifest_entries,
@@ -1379,6 +1426,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                 "real_openclaw_revision": True,
                 "low_budget_revision": True,
                 "revision_executor": "openclaw-minimal",
+                "openclaw_concurrency": openclaw_concurrency,
                 "require_effective_submission_change": require_effective_submission_change,
                 "revision_retry_on_noop": revision_retry_on_noop,
                 "revision_retry_on_route_unknown": revision_retry_on_route_unknown,
@@ -1444,7 +1492,8 @@ def _run_openclaw_adaptive_smoke_tournament(
                     pass
 
             revision_manifest_for_round: dict[str, dict] = {}
-            for agent_id in agent_ids:
+
+            def _run_revision_job(agent_id: str) -> tuple[str, dict]:
                 meta = model_by_agent[agent_id]
                 provider_model = meta.get("provider_model")
                 executor = meta.get("executor")
@@ -1593,7 +1642,7 @@ def _run_openclaw_adaptive_smoke_tournament(
                     revision_status = "no_effect"
                     rev_ok = False
                     failure_reason = no_effect_msg
-                revision_manifest_for_round[agent_id] = {
+                return agent_id, {
                     "agent_id": agent_id,
                     "provider_model": provider_model,
                     "executor": executor,
@@ -1623,12 +1672,22 @@ def _run_openclaw_adaptive_smoke_tournament(
                     "revision_attempt_count": attempt_count,
                     **revision_change_fields,
                 }
-                latest_post_by_agent[agent_id] = post
+
+            revision_results = _run_ordered_agent_jobs(
+                agent_ids,
+                _run_revision_job,
+                concurrency=openclaw_concurrency,
+                stage_name=f"round_{round_idx} revision",
+            )
+            for agent_id, revision_entry in revision_results:
+                revision_manifest_for_round[agent_id] = revision_entry
+                latest_post_by_agent[agent_id] = Path("workspace/posts") / tournament_name / agent_id / f"codebase_post_{round_idx}"
 
             write_json(
                 round_dir / "revision_manifest.json",
                 {
                     "require_effective_submission_change": require_effective_submission_change,
+                    "openclaw_concurrency": openclaw_concurrency,
                     "revision_retry_on_noop": revision_retry_on_noop,
                     "revision_retry_on_route_unknown": revision_retry_on_route_unknown,
                     "agents": [revision_manifest_for_round[a] for a in agent_ids],
@@ -1721,6 +1780,7 @@ def main() -> None:
     parser.add_argument("--tournament", required=True)
     parser.add_argument("--models", required=False)
     parser.add_argument("--schedule-only", action="store_true")
+    parser.add_argument("--openclaw-concurrency", type=int, default=None)
     args = parser.parse_args()
     started_at = time.time()
 
@@ -1735,6 +1795,9 @@ def main() -> None:
         tournament = resolve_tournament_counts(tournament, roster_models)
     else:
         tournament = resolve_tournament_counts(tournament, None)
+    if args.openclaw_concurrency is not None:
+        tournament["openclaw_concurrency"] = args.openclaw_concurrency
+    _openclaw_concurrency(tournament)
 
     require_keys(regime, ["name", "description"], "regime config")
     require_keys(
