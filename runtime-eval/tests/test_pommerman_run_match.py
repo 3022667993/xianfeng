@@ -31,3 +31,14 @@ def test_pommerman_run_match_smoke(tmp_path):
         "seat_3_submission": "dummy3",
     }
     assert scorecard["background_agents"] == ["dummy2", "dummy3"]
+    compact_rows = [
+        json.loads(line)
+        for line in (round_dir / "trajectory_compact_match_a.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert compact_rows
+    assert compact_rows[0]["actions"]["seat_2"] == 5
+    assert compact_rows[0]["actions"]["seat_3"] == 5
+    if len(compact_rows) > 1:
+        assert compact_rows[1]["actions"]["seat_2"] == 0
+        assert compact_rows[1]["actions"]["seat_3"] == 0

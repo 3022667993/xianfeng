@@ -118,13 +118,14 @@ def test_starter_readme_documents_baseagent_contract():
     assert "act(...)` returns one integer action in `[0, 5]`" in readme
 
 
-def test_starter_readme_documents_passive_background_dummies():
+def test_starter_readme_documents_suicidal_filler_background_agents():
     readme = Path("starter_repos/pommerman_1v1/README.md").read_text(encoding="utf-8").lower()
-    assert "dummy2       = passive background dummy" in readme
-    assert "dummy3       = passive background dummy" in readme
-    assert "background dummy agents exist to satisfy the four-agent ffa environment" in readme
-    assert "background dummy agents are passive" in readme
+    assert "dummy2       = suicidal filler background agent" in readme
+    assert "dummy3       = suicidal filler background agent" in readme
+    assert "background filler agents exist to satisfy the four-agent ffa environment" in readme
+    assert "attempt to remove themselves early through legal actions" in readme
     assert "not intended as competitive opponents" in readme
+    assert "evaluated as left vs right under the runner's pairwise result logic" in readme
 
 
 def test_starter_readme_documents_observation_api_pitfalls():

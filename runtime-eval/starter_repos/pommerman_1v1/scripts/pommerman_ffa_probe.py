@@ -25,8 +25,15 @@ from seed_control import apply_env_seed, apply_pre_env_seed
 RECORD_AGENT_LABELS = ["left", "right", "dummy2", "dummy3"]
 
 
-class PassiveDummyAgent(agents.BaseAgent):
+class SuicideDummyAgent(agents.BaseAgent):
+    def __init__(self):
+        super().__init__()
+        self._step = 0
+
     def act(self, obs, action_space=None):
+        self._step += 1
+        if self._step == 1:
+            return 5
         return 0
 
 
@@ -220,8 +227,8 @@ def main():
     agent_list = [
         left_agent,
         right_agent,
-        PassiveDummyAgent(),
-        PassiveDummyAgent(),
+        SuicideDummyAgent(),
+        SuicideDummyAgent(),
     ]
 
     env = _make_env(env_id, agent_list, record_json_dir)

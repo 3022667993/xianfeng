@@ -49,8 +49,8 @@ Each match contains:
 ```text
 left_agent   = evaluated agent A
 right_agent  = evaluated agent B
-dummy2       = passive background dummy
-dummy3       = passive background dummy
+dummy2       = suicidal filler background agent
+dummy3       = suicidal filler background agent
 ```
 
 Important identity rules:
@@ -59,8 +59,10 @@ Important identity rules:
 * Persistent identity is `agent_id`, not left/right.
 * Across a tournament, the same agent may appear in different seats.
 * Do not store strategy assumptions like "I am always left" or "I am always right".
-* Background dummy agents exist to satisfy the four-agent FFA environment.
-* Background dummy agents are passive and are not intended as competitive opponents.
+* Background filler agents exist to satisfy the four-agent FFA environment.
+* Background filler agents attempt to remove themselves early through legal actions.
+* Background filler agents are not intended as competitive opponents.
+* Submitted agents are evaluated as left vs right under the runner's pairwise result logic.
 
 The runner preserves raw match artifacts such as:
 
@@ -456,10 +458,12 @@ This runtime-eval setup is not a pure two-agent duel. It is a two-evaluated-agen
 
 Implications:
 
-* dummy2/dummy3 are passive background agents that exist to satisfy the four-agent FFA environment
+* dummy2/dummy3 are suicidal filler background agents that exist to satisfy the four-agent FFA environment
+* dummy2/dummy3 attempt to remove themselves early through legal actions
 * do not assume only the evaluated opponent matters
 * the evaluated opponent is the main comparison target
 * dummy agents are not intended as competitive opponents
+* submitted agents are still evaluated as left vs right under the runner's pairwise result logic
 * avoid overfitting to left/right seat identity
 
 ## 18. Submission Contract
