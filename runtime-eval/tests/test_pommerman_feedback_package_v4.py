@@ -170,17 +170,22 @@ def test_feedback_package_v4_generated_with_official_record_and_audits_pass(tmp_
 
     readme_text = (package_root / "README.md").read_text(encoding="utf-8")
     assert "../../README.md" in readme_text
+    assert "For game rules, action meanings, win/draw/loss objective, rewards, and the required submission API, read `../../README.md` first." in readme_text
     assert "This feedback package contains match evidence, not the rules specification." in readme_text
-    assert "Prefer winning over drawing, and drawing over losing." in readme_text
-    assert "A timeout draw is not a strong success signal if better outcomes are possible." in readme_text
+    assert "Prefer robust wins over draws, and draws over losses." in readme_text
+    assert "A timeout draw is a weak outcome when no submitted opponent is eliminated." in readme_text
+    assert "Early self-elimination is unfavorable evidence." in readme_text
     assert "both submitted agents lost to a dummy/background agent" in readme_text
     assert "not as a successful draw" in readme_text
+    assert "opponent's self-destruction" in readme_text
+    assert "not strong evidence of a robust strategy" in readme_text
     assert "Use this feedback package as evidence." in readme_text
     assert "Start with `public_scoreboard.json`, then `matches/*/match_index.json`, then `matches/*/actions.jsonl`" in readme_text
     assert "board/state replay is needed" in readme_text
     assert "concrete strategy or behavior change" in readme_text
-    assert "improve future tournament outcomes against opponents" in readme_text
-    assert "robustness, consistency, or resilience" in readme_text
+    assert "improve future decisive tournament outcomes against opponents" in readme_text
+    assert "preserving validity and avoiding obvious self-destruction" in readme_text
+    assert "If a previous result was favorable, it can still be improved for robustness, consistency, or resilience." in readme_text
     assert "`submitted_pair_outcome`: distinguishes wins, timeout draws, dummy/background-agent wins" in readme_text
     assert "`draw_type`: explains why a pairwise draw occurred" in readme_text
     assert "Feedback files are read-only evidence." in readme_text or "read-only evidence" in readme_text
@@ -518,21 +523,31 @@ def test_v4_readme_spec_has_no_forbidden_terms():
         "opponent pressure",
         "reduce stop",
         "safe aggression",
+        "bomb more",
+        "go to center",
+        "chase opponent",
+        "attack with bombs",
+        "rush",
+        "corner trapping",
         "codebase_post_",
     ]:
         assert forbidden not in lower
     assert "../../readme.md" in lower
     assert "match evidence, not the rules specification" in lower
-    assert "prefer winning over drawing, and drawing over losing" in lower
-    assert "timeout draw is not a strong success signal" in lower
+    assert "prefer robust wins over draws, and draws over losses" in lower
+    assert "timeout draw is a weak outcome when no submitted opponent is eliminated" in lower
+    assert "early self-elimination is unfavorable evidence" in lower
     assert "both submitted agents lost to a dummy/background agent" in lower
     assert "not as a successful draw" in lower
+    assert "opponent's self-destruction" in lower
+    assert "not strong evidence of a robust strategy" in lower
     assert "use this feedback package as evidence" in lower
     assert "start with `public_scoreboard.json`, then `matches/*/match_index.json`, then `matches/*/actions.jsonl`" in lower
     assert "board/state replay is needed" in lower
     assert "concrete strategy or behavior change" in lower
-    assert "improve future tournament outcomes against opponents" in lower
-    assert "robustness, consistency, or resilience" in lower
+    assert "improve future decisive tournament outcomes against opponents" in lower
+    assert "preserving validity and avoiding obvious self-destruction" in lower
+    assert "if a previous result was favorable, it can still be improved for robustness, consistency, or resilience" in lower
     assert "`submitted_pair_outcome`: distinguishes wins, timeout draws, dummy/background-agent wins" in lower
     assert "`draw_type`: explains why a pairwise draw occurred" in lower
     assert "current post-round codebase" in lower

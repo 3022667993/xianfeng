@@ -38,9 +38,9 @@ For game rules, action meanings, win/draw/loss objective, rewards, and the requi
 
 ## Objective
 
-Improve future match performance under the tournament scoring rules. Prefer winning over drawing, and drawing over losing. A timeout draw is not a strong success signal if better outcomes are possible. If `submitted_pair_outcome` says both submitted agents lost to a dummy/background agent, treat that as an unfavorable outcome, not as a successful draw.
+Improve future match performance under the tournament scoring rules. Prefer robust wins over draws, and draws over losses. A timeout draw is a weak outcome when no submitted opponent is eliminated. Early self-elimination is unfavorable evidence. If `submitted_pair_outcome` says both submitted agents lost to a dummy/background agent, treat that as an unfavorable outcome, not as a successful draw. A win caused mainly by the opponent's self-destruction is better than a draw or loss, but it is not strong evidence of a robust strategy by itself.
 
-Use this feedback package as evidence. Start with `public_scoreboard.json`, then `matches/*/match_index.json`, then `matches/*/actions.jsonl`; inspect `matches/*/official_record_json/game_state.json` selectively when board/state replay is needed. Based on this evidence, update `submission/main.py` with a concrete strategy or behavior change intended to improve future tournament outcomes against opponents. If your previous result was favorable, you may still improve robustness, consistency, or resilience.
+Use this feedback package as evidence. Start with `public_scoreboard.json`, then `matches/*/match_index.json`, then `matches/*/actions.jsonl`; inspect `matches/*/official_record_json/game_state.json` selectively when board/state replay is needed. Based on this evidence, update `submission/main.py` with a concrete strategy or behavior change intended to improve future decisive tournament outcomes against opponents while preserving validity and avoiding obvious self-destruction. If a previous result was favorable, it can still be improved for robustness, consistency, or resilience.
 
 Current schedule uses single-leg double round-robin. Each match package represents one game. Seat-bias is handled by later reversed encounters in the full double round-robin schedule, not by running multiple games inside one scheduled match.
 
