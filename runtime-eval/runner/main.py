@@ -1568,6 +1568,10 @@ def _run_openclaw_adaptive_smoke_tournament(
                     audit_warnings = []
                     audit_errors = []
                     changed_files_reported_by_openclaw = []
+                    revision_decision = "failed"
+                    intentional_no_change = False
+                    no_change_rationale = None
+                    no_change_evidence_used = None
                     openclaw_timeout_seconds = None
                     audit_payload: dict | None = None
                     if audit_json.exists():
@@ -1578,6 +1582,10 @@ def _run_openclaw_adaptive_smoke_tournament(
                             changed_files_reported_by_openclaw = audit_payload.get("changedFiles", []) or []
                             audit_errors = audit_payload.get("errors", []) or []
                             openclaw_timeout_seconds = audit_payload.get("openclawTimeoutSeconds")
+                            revision_decision = audit_payload.get("revisionDecision", revision_decision)
+                            intentional_no_change = bool(audit_payload.get("intentionalNoChange", False))
+                            no_change_rationale = audit_payload.get("noChangeRationale")
+                            no_change_evidence_used = audit_payload.get("noChangeEvidenceUsed")
                         except Exception as exc:
                             audit_errors = [f"failed_to_read_revision_audit:{exc!r}"]
                     provider_route_status, actual_provider, actual_model, fallback_used = _extract_openclaw_route_provenance(
@@ -1634,13 +1642,24 @@ def _run_openclaw_adaptive_smoke_tournament(
                         rev_msg = failure_reason
                     break
 
-                revision_status = "ok" if rev_ok else "failed"
+                if bool(rev_ok) and effective_change:
+                    revision_status = "changed"
+                    revision_decision = "changed"
+                    intentional_no_change = False
+                    no_change_rationale = None
+                    no_change_evidence_used = None
+                elif bool(rev_ok) and intentional_no_change:
+                    revision_status = "intentional_no_change"
+                    revision_decision = "intentional_no_change"
+                else:
+                    revision_status = "failed"
                 if failure_reason is None:
                     failure_reason = None if rev_ok else rev_msg
                 no_effect_msg = "OpenClaw completed but did not modify the runner-tracked codebase_post_t/submission/main.py."
-                if require_effective_submission_change and ((rev_ok and not effective_change) or (not rev_ok and rev_msg == no_effect_msg)):
+                if require_effective_submission_change and not intentional_no_change and ((rev_ok and not effective_change) or (not rev_ok and rev_msg == no_effect_msg)):
                     revision_status = "no_effect"
                     rev_ok = False
+                    revision_decision = "no_effect"
                     failure_reason = no_effect_msg
                 return agent_id, {
                     "agent_id": agent_id,
@@ -1650,6 +1669,10 @@ def _run_openclaw_adaptive_smoke_tournament(
                     "revision_executor": "openclaw-minimal",
                     "revision_status": revision_status,
                     "revision_ok": bool(rev_ok),
+                    "revision_decision": revision_decision,
+                    "intentional_no_change": intentional_no_change,
+                    "no_change_rationale": no_change_rationale if intentional_no_change else None,
+                    "no_change_evidence_used": no_change_evidence_used if intentional_no_change else None,
                     "codebase_play_path": str(codebase),
                     "submission_path": str(submission),
                     "codebase_post_path": str(post),

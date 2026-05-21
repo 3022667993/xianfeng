@@ -14,6 +14,25 @@ class _Proc:
         self.stderr = stderr
 
 
+def _openclaw_success_response(final_text: str | None = None):
+    meta = {
+        "systemPromptReport": {
+            "workspaceDir": "/tmp/workspace",
+            "injectedWorkspaceFiles": [],
+            "tools": {"entries": [{"name": "read"}]},
+            "skills": {"promptChars": 0},
+        },
+        "executionTrace": {
+            "winnerProvider": "relay",
+            "winnerModel": "test-model",
+            "fallbackUsed": False,
+        },
+    }
+    if final_text is not None:
+        meta["finalAssistantVisibleText"] = final_text
+    return {"meta": meta}
+
+
 def test_run_openclaw_agent_includes_model_when_provider_model_supplied(monkeypatch):
     calls = []
 
@@ -216,8 +235,15 @@ def test_revision_message_includes_feedback_and_effective_change_requirements():
     )
     assert "Read feedback from" in msg
     assert "Use the feedback package at" in msg
-    assert "You must modify submission/main.py" in msg
-    assert "Previous attempt made no submitted-code change" in msg
+    assert "Valid revision outcomes:" in msg
+    assert "Modify: read feedback evidence, read `submission/main.py`" in msg
+    assert "Intentional no-change: read feedback evidence, read or inspect `submission/main.py`" in msg
+    assert "REVISION_DECISION: no_change" in msg
+    assert "RATIONALE: <why keeping current code is preferable>" in msg
+    assert "EVIDENCE_USED: <feedback files or evidence considered>" in msg
+    assert "Previous attempt neither modified submission/main.py nor provided a valid intentional no-change decision" in msg
+    assert "You must either modify submission/main.py or explicitly return `REVISION_DECISION: no_change`" in msg
+    assert "Empty response or directory listing is not sufficient" in msg
     assert "Treat 800-step draw outcomes as a failure signal." in msg
     assert "what anti-draw behavior was added" in msg
     assert "what safety guard prevents suicide" in msg
@@ -270,33 +296,46 @@ def test_neutral_revision_message_omits_coached_tactics_but_keeps_constraints():
     )
     assert "Read feedback from" not in msg
     assert "feedback/round_1" in msg
-    assert "You must modify submission/main.py" in msg
-    assert "Editable target:" in msg
+    assert "Valid revision outcomes:" in msg
+    assert "Modify: read feedback evidence, read `submission/main.py`" in msg
+    assert "Intentional no-change: read feedback evidence, read or inspect `submission/main.py`" in msg
+    assert "REVISION_DECISION: no_change" in msg
+    assert "RATIONALE: <why keeping current code is preferable>" in msg
+    assert "EVIDENCE_USED: <feedback files or evidence considered>" in msg
+    assert "You must either modify submission/main.py or explicitly return `REVISION_DECISION: no_change`" in msg
+    assert "Empty response or directory listing is not sufficient" in msg
+    assert "Editable target for the Modify outcome:" in msg
     assert "Open and edit exactly: `submission/main.py`." in msg
     assert "This path is relative to the per-run codebase workspace." in msg
     assert "This is the only submission source file whose changes will be collected by the runner." in msg
     assert "First read `submission/main.py`, then edit or rewrite it." in msg
     assert "If the edit tool fails because oldText does not match, use the write tool to overwrite `submission/main.py`" in msg
-    assert "Do not finish until `submission/main.py` has actually changed." in msg
+    assert "Metadata-only edits do not count as a valid revision." in msg
+    assert "Empty responses, merely listing files, and incomplete turns are not valid no-change decisions." in msg
     assert "/tmp/run/codebase_post_t/submission/main.py" not in msg
     assert "Do not use an absolute path." not in msg
     assert "Do not prefix the path with `codebase_post_t/`." not in msg
     assert "Objective: improve expected future tournament outcome under the provided feedback package and constraints." in msg
     assert "feedback package, public scoreboard, match replay evidence, action logs, and run logs as evidence" in msg
-    assert "concrete strategy or behavior change" in msg
-    assert "improve future tournament outcomes against opponents" in msg
-    assert "Prefer wins over draws, and draws over losses." in msg
+    assert "Then either update `submission/main.py` with a concrete strategy or behavior change" in msg
+    assert "or explicitly choose intentional no-change using the required structured decision lines" in msg
+    assert "future decisive tournament outcomes against opponents" in msg
+    assert "Prefer robust wins over draws, and draws over losses." in msg
     assert "robust, consistent, or resilient" in msg
-    assert "timeout draws" in msg
+    assert "timeout draw is a weak outcome when no submitted opponent is eliminated" in msg
+    assert "Early self-elimination is unfavorable" in msg
+    assert "dummy/background-agent win" in msg
+    assert "both submitted agents lost to a dummy/background agent" in msg
+    assert "opponent's self-destruction" in msg
+    assert "not strong evidence of a robust strategy" in msg
     assert "`submitted_pair_outcome`" in msg
-    assert "dummy/background agent" in msg
     assert "feedback package is evidence, not a hand-authored strategy script" in msg
     assert "real Pommerman observations containing NumPy arrays" in msg
     assert "do not treat NumPy arrays as booleans" in msg
     assert 'Do not assume `obs["agent_id"]` exists' in msg
     assert "Preserve `from pommerman import agents`, `make_agent()`, and `pommerman.agents.BaseAgent` inheritance." in msg
     assert "return a valid fallback action in `[0, 5]`" in msg
-    assert "Previous attempt made no submitted-code change" in msg
+    assert "Previous attempt neither modified submission/main.py nor provided a valid intentional no-change decision" in msg
     assert "center when safe" not in msg
     assert "center movement" not in msg
     assert "clear wood for powerups" not in msg
@@ -309,6 +348,9 @@ def test_neutral_revision_message_omits_coached_tactics_but_keeps_constraints():
     assert "bomb more" not in msg
     assert "go to center" not in msg
     assert "chase opponent" not in msg
+    assert "attack with bombs" not in msg
+    assert "rush" not in msg
+    assert "corner trapping" not in msg
     assert "what anti-draw behavior was added" not in msg
 
 
@@ -330,12 +372,16 @@ def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_const
     assert "Preserve `from pommerman import agents`, a valid `make_agent()` entry point, and `pommerman.agents.BaseAgent` inheritance." in msg
     assert "Replace the minimal fallback with a concrete strategy or behavior implementation" in msg
     assert "Objective: improve expected future tournament outcome while preserving valid actions" in msg
-    assert "Prefer wins over draws, and draws over losses." in msg
+    assert "Prefer robust wins over draws, and draws over losses." in msg
     assert "concrete behavior or strategy" in msg
-    assert "improve future performance against opponents" in msg
-    assert "timeout draw is not a strong success signal" in msg
-    assert "dummy/background agent" in msg
-    assert "Avoid obvious self-destruction and keep the submission valid." in msg
+    assert "future decisive outcomes against opponents" in msg
+    assert "timeout draw is a weak outcome when no submitted opponent is eliminated" in msg
+    assert "Early self-elimination is unfavorable" in msg
+    assert "dummy/background-agent win" in msg
+    assert "both-submitted-lost-to-dummy outcome" in msg
+    assert "opponent's self-destruction" in msg
+    assert "not strong evidence of a robust strategy" in msg
+    assert "preserving validity and avoiding obvious self-destruction" in msg
     assert "Editable target:" in msg
     assert "Open and edit exactly: `submission/main.py`." in msg
     assert "This path is relative to the per-run codebase workspace." in msg
@@ -364,6 +410,9 @@ def test_neutral_initial_synthesis_message_omits_coached_tactics_but_keeps_const
     assert "bomb more" not in msg
     assert "go to center" not in msg
     assert "chase opponent" not in msg
+    assert "attack with bombs" not in msg
+    assert "rush" not in msg
+    assert "corner trapping" not in msg
     assert "what anti-draw behavior was added" not in msg
 
 
@@ -382,6 +431,108 @@ def test_initial_synthesis_message_does_not_reference_feedback_package_paths():
     assert "feedback/round_" not in msg
     assert "agent_feedback_" not in msg
     assert "trajectory_summary.json" not in msg
+
+
+def _run_revision_main_with_final_text(monkeypatch, tmp_path, capsys, final_text: str | None, *, mutate=None):
+    codebase = tmp_path / "codebase_post"
+    (codebase / "submission").mkdir(parents=True)
+    (codebase / "submission" / "main.py").write_text("AGGRESSION = 0\n", encoding="utf-8")
+    (codebase / "notes").mkdir()
+    (codebase / "notes" / "revision_log.md").write_text("# log\n", encoding="utf-8")
+
+    def fake_run_openclaw_agent(message: str, **kwargs):
+        _ = message
+        if mutate is not None:
+            session_config_path = kwargs.get("session_config_path")
+            config = json.loads(Path(session_config_path).read_text(encoding="utf-8"))
+            workspace = Path(config["agents"]["defaults"]["workspace"])
+            mutate(workspace)
+        return (_openclaw_success_response(final_text), "", "", 0)
+
+    monkeypatch.setattr(ocm, "_run_openclaw_agent", fake_run_openclaw_agent)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "openclaw_minimal.py",
+            "--mode",
+            "revision",
+            "--bootstrap",
+            str(Path("runner/core/openclaw_minimal_bootstrap.txt").resolve()),
+            "--codebase-post-dir",
+            str(codebase),
+            "--side",
+            "left",
+            "--game",
+            "test_game",
+            "--regime",
+            "A00",
+            "--agent-id",
+            "main",
+            "--provider-model",
+            "relay/test-model",
+        ],
+    )
+    ocm.main()
+    result = json.loads(capsys.readouterr().out)
+    audit = json.loads((codebase / "revision_audit.json").read_text(encoding="utf-8"))
+    run_dir = Path(audit["runDir"])
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
+    return result, audit
+
+
+def test_revision_main_accepts_valid_intentional_no_change(monkeypatch, tmp_path, capsys):
+    final_text = (
+        "REVISION_DECISION: no_change\n"
+        "RATIONALE: The current code should be preserved for this evidence.\n"
+        "EVIDENCE_USED: feedback README and public scoreboard.\n"
+    )
+    result, audit = _run_revision_main_with_final_text(monkeypatch, tmp_path, capsys, final_text)
+    assert result["success"] is True
+    assert result["changed"] is False
+    assert result["revision_decision"] == "intentional_no_change"
+    assert result["intentional_no_change"] is True
+    assert audit["revisionDecision"] == "intentional_no_change"
+    assert audit["intentionalNoChange"] is True
+    assert audit["noChangeRationale"] == "The current code should be preserved for this evidence."
+    assert audit["noChangeEvidenceUsed"] == "feedback README and public scoreboard."
+
+
+def test_revision_main_rejects_empty_assistant_output_as_no_effect(monkeypatch, tmp_path, capsys):
+    result, audit = _run_revision_main_with_final_text(monkeypatch, tmp_path, capsys, "")
+    assert result["success"] is True
+    assert result["changed"] is False
+    assert result["revision_decision"] == "no_effect"
+    assert result["intentional_no_change"] is False
+    assert audit["revisionDecision"] == "no_effect"
+    assert audit["intentionalNoChange"] is False
+
+
+def test_revision_main_rejects_incomplete_no_change_marker(monkeypatch, tmp_path, capsys):
+    final_text = "REVISION_DECISION: no_change\nEVIDENCE_USED: scoreboard\n"
+    result, audit = _run_revision_main_with_final_text(monkeypatch, tmp_path, capsys, final_text)
+    assert result["revision_decision"] == "no_effect"
+    assert result["intentional_no_change"] is False
+    assert audit["intentionalNoChange"] is False
+
+
+def test_revision_main_rejects_metadata_only_change_as_intentional_no_change(monkeypatch, tmp_path, capsys):
+    final_text = (
+        "REVISION_DECISION: no_change\n"
+        "RATIONALE: Keep current behavior.\n"
+        "EVIDENCE_USED: scoreboard.\n"
+    )
+
+    def mutate(codebase: Path):
+        (codebase / "notes" / "model_note.md").write_text("metadata only\n", encoding="utf-8")
+
+    result, audit = _run_revision_main_with_final_text(monkeypatch, tmp_path, capsys, final_text, mutate=mutate)
+    assert result["success"] is False
+    assert result["revision_decision"] == "failed"
+    assert result["intentional_no_change"] is False
+    assert audit["intentionalNoChange"] is False
+    assert "notes/model_note.md" in audit["disallowedChangedFiles"]
 
 
 def test_submission_contract_validation_reports_real_observation_failures(monkeypatch, tmp_path):

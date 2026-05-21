@@ -126,7 +126,10 @@ def audit_effective_revision(*, allow_all_noop: bool = False) -> tuple[list[str]
         errors.append("no revised agents found in revision manifests")
         return errors, warnings
 
-    noop_count = 0
+    no_effect_count = 0
+    changed_count = 0
+    intentional_no_change_count = 0
+    failed_no_effect_count = 0
     require_effective_change_globally = _load_tournament_require_effective_change()
     for round_idx, entry in revised_entries:
         agent_id = entry.get("agent_id", "<unknown>")
@@ -148,14 +151,26 @@ def audit_effective_revision(*, allow_all_noop: bool = False) -> tuple[list[str]
         effective = bool(entry.get("effective_submission_changed"))
         changed_files = entry.get("changed_files")
         changed_hash_based = entry.get("changed_files_hash_based")
+        intentional_no_change = bool(entry.get("intentional_no_change", False)) or (
+            entry.get("revision_status") == "intentional_no_change"
+        )
         if not isinstance(changed_files, list):
             changed_files = []
         if not isinstance(changed_hash_based, list):
             errors.append(f"{label}: changed_files_hash_based must be a list")
             changed_hash_based = []
-        if not effective:
-            noop_count += 1
-            warnings.append(f"{label}: no-op revision for submission/main.py")
+        if effective:
+            changed_count += 1
+        elif intentional_no_change:
+            intentional_no_change_count += 1
+            warnings.append(f"{label}: intentional no-change revision for submission/main.py")
+            if entry.get("revision_ok") is not True:
+                errors.append(f"{label}: intentional_no_change revision must have revision_ok=true")
+        else:
+            no_effect_count += 1
+            if entry.get("revision_status") == "no_effect" or entry.get("revision_ok") is False:
+                failed_no_effect_count += 1
+            warnings.append(f"{label}: no-effect revision for submission/main.py")
             if require_effective_change_globally:
                 errors.append(f"{label}: require_effective_submission_change=true but effective_submission_changed=false")
 
@@ -172,8 +187,16 @@ def audit_effective_revision(*, allow_all_noop: bool = False) -> tuple[list[str]
             if "submission/main.py" in diff_targets and before_hash == after_hash:
                 errors.append(f"{label}: diff patch targets submission/main.py but hashes are equal")
 
-    if len(revised_entries) == noop_count and not allow_all_noop:
-        errors.append("all OpenClaw revisions were no-op for submitted code")
+    warnings.append(
+        "revision_counts "
+        f"changed={changed_count} "
+        f"intentional_no_change={intentional_no_change_count} "
+        f"no_effect={no_effect_count} "
+        f"failed_no_effect={failed_no_effect_count}"
+    )
+
+    if len(revised_entries) == no_effect_count and not allow_all_noop:
+        errors.append("all OpenClaw revisions were no-effect for submitted code")
 
     for rd in round_dirs:
         round_idx = int(rd.name.split("_", 1)[1])

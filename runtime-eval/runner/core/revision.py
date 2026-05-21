@@ -32,6 +32,21 @@ def _sha256_file(path: Path) -> str | None:
     return h.hexdigest()
 
 
+def _read_revision_audit_intentional_no_change(codebase_post_dir: Path) -> bool:
+    audit_path = codebase_post_dir / "revision_audit.json"
+    if not audit_path.exists():
+        return False
+    try:
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    return bool(audit.get("intentionalNoChange") is True or audit.get("revisionDecision") == "intentional_no_change")
+
+
+def _message_is_intentional_no_change(message: str) -> bool:
+    return "intentionally left submission/main.py unchanged" in str(message)
+
+
 def _infer_post_context(codebase_post_dir: Path) -> tuple[str | None, str | None]:
     """Best-effort parse `workspace/posts/<tournament>/<agent_id>/codebase_post_<round>`."""
     try:
@@ -397,6 +412,7 @@ def _apply_openclaw_minimal_revision(
     reason = f"round_{previous_round} scorecard.left_right_winner={result_previous_winner}"
     changed_files = result.get("changed_files", [])
     changed = bool(result.get("changed", False))
+    intentional_no_change = bool(result.get("intentional_no_change", False))
     success = bool(result.get("success", False))
     timeout_error = False
     context_overflow_error = bool(result.get("context_overflow_detected", False))
@@ -447,6 +463,8 @@ def _apply_openclaw_minimal_revision(
         if isinstance(old_aggression, int) and isinstance(new_aggression, int):
             return True, f"openclaw-minimal revision applied: AGGRESSION {old_aggression}->{new_aggression}"
         return True, "openclaw-minimal revision applied: submission/main.py changed"
+    if intentional_no_change:
+        return True, "openclaw-minimal revision intentionally left submission/main.py unchanged"
     return True, "openclaw-minimal revision applied: AGGRESSION unchanged"
 
 
@@ -730,6 +748,8 @@ def apply_minimal_revision(
             after_hash = _sha256_file(submission_main_path)
             if before_hash != after_hash:
                 return ok, msg
+            if _message_is_intentional_no_change(msg) or _read_revision_audit_intentional_no_change(codebase_post_dir):
+                return True, msg
             if attempt < retries:
                 continue
         return False, "OpenClaw completed but did not modify the runner-tracked codebase_post_t/submission/main.py."

@@ -50,6 +50,9 @@ def _mk_rev_entry(
     changed_files: list[str] | None = None,
     changed_files_hash_based: list[str] | None = None,
     diff_targets_submission: bool = False,
+    revision_status: str | None = None,
+    revision_ok: bool = True,
+    intentional_no_change: bool = False,
 ) -> dict:
     play = Path("workspace/codebases") / tournament / agent_id / f"codebase_play_{round_idx}"
     post = Path("workspace/posts") / tournament / agent_id / f"codebase_post_{round_idx}"
@@ -71,7 +74,12 @@ def _mk_rev_entry(
     return {
         "agent_id": agent_id,
         "revision_attempted": True,
-        "revision_ok": True,
+        "revision_ok": revision_ok,
+        "revision_status": revision_status
+        or ("intentional_no_change" if intentional_no_change else ("changed" if effective else "no_effect")),
+        "intentional_no_change": intentional_no_change,
+        "no_change_rationale": "No code change is expected to improve future outcomes." if intentional_no_change else None,
+        "no_change_evidence_used": "public scoreboard and feedback README" if intentional_no_change else None,
         "changed_files": [] if changed_files is None else changed_files,
         "codebase_play_path": str(play),
         "codebase_post_path": str(post),
@@ -190,7 +198,7 @@ def test_effective_revision_audit_fails_all_noop_by_default(tmp_path, monkeypatc
     )
     _mk_rev_manifest(round1, [entry])
     errors, _warnings = audit_effective_revision()
-    assert any("all OpenClaw revisions were no-op for submitted code" in e for e in errors)
+    assert any("all OpenClaw revisions were no-effect for submitted code" in e for e in errors)
 
 
 def test_effective_revision_audit_allows_all_noop_with_flag(tmp_path, monkeypatch):
@@ -225,3 +233,26 @@ def test_effective_revision_audit_requires_change_when_tournament_requires_it(tm
     _mk_rev_manifest(round1, [entry])
     errors, _warnings = audit_effective_revision()
     assert any("require_effective_submission_change=true" in e for e in errors)
+
+
+def test_effective_revision_audit_allows_intentional_no_change_when_effective_required(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _mk_tournament_cfg(require_effective=True)
+    round1 = Path("logs/round_1")
+    _mk_round_manifest(round1)
+    entry = _mk_rev_entry(
+        tournament="t",
+        round_idx=1,
+        agent_id="a1",
+        before_txt="AGGRESSION = 0\n",
+        after_txt="AGGRESSION = 0\n",
+        intentional_no_change=True,
+    )
+    _mk_rev_manifest(round1, [entry])
+    round2 = Path("logs/round_2")
+    _mk_round_manifest(round2)
+    _mk_prop_manifest(round2, tournament="t", source_round=1, target_round=2, agent_id="a1")
+    errors, warnings = audit_effective_revision()
+    assert errors == []
+    assert any("intentional no-change revision" in w for w in warnings)
+    assert any("changed=0 intentional_no_change=1 no_effect=0 failed_no_effect=0" in w for w in warnings)

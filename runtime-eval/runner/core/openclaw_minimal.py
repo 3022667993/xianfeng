@@ -78,6 +78,18 @@ PROMPT_BUDGET_BEFORE_RESERVE_RE = re.compile(
     r"promptBudgetBeforeReserve\s*(?:=|≈)\s*([0-9][0-9,]*)",
     flags=re.IGNORECASE,
 )
+NO_CHANGE_MARKER_RE = re.compile(
+    r"^\s*REVISION_DECISION\s*:\s*(?P<value>[^\n\r]*)",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+RATIONALE_MARKER_RE = re.compile(
+    r"^\s*RATIONALE\s*:\s*(?P<value>[^\n\r]*)",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+EVIDENCE_USED_MARKER_RE = re.compile(
+    r"^\s*EVIDENCE_USED\s*:\s*(?P<value>[^\n\r]*)",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -221,6 +233,46 @@ def _extract_context_overflow_metadata(
         "context_overflow_detected": context_overflow_detected,
         "prompt_estimated_tokens": prompt_estimated_tokens,
         "prompt_budget_before_reserve": prompt_budget_before_reserve,
+    }
+
+
+def _extract_assistant_visible_text(response: dict[str, Any] | None) -> str | None:
+    if not isinstance(response, dict):
+        return None
+    meta = response.get("meta")
+    if isinstance(meta, dict):
+        text = meta.get("finalAssistantVisibleText")
+        if isinstance(text, str):
+            return text
+
+    payloads = response.get("payloads")
+    if isinstance(payloads, list):
+        chunks: list[str] = []
+        for payload in payloads:
+            if isinstance(payload, str):
+                chunks.append(payload)
+            elif isinstance(payload, dict):
+                text = payload.get("text") or payload.get("content")
+                if isinstance(text, str):
+                    chunks.append(text)
+        if chunks:
+            return "\n".join(chunks)
+    return None
+
+
+def _parse_intentional_no_change(text: str | None) -> dict[str, Any]:
+    raw = text if isinstance(text, str) else ""
+    decision_match = NO_CHANGE_MARKER_RE.search(raw)
+    rationale_match = RATIONALE_MARKER_RE.search(raw)
+    evidence_match = EVIDENCE_USED_MARKER_RE.search(raw)
+    decision = decision_match.group("value").strip().lower() if decision_match else ""
+    rationale = rationale_match.group("value").strip() if rationale_match else ""
+    evidence_used = evidence_match.group("value").strip() if evidence_match else ""
+    valid = decision == "no_change" and bool(rationale) and bool(evidence_used)
+    return {
+        "intentional_no_change": valid,
+        "no_change_rationale": rationale or None,
+        "no_change_evidence_used": evidence_used or None,
     }
 
 
@@ -438,8 +490,9 @@ def _make_revision_message(
     if retry_on_noop:
         retry_suffix = (
             "\nRetry requirement:\n"
-            "- Previous attempt made no submitted-code change.\n"
-            "- You must edit submission/main.py.\n"
+            "- Previous attempt neither modified submission/main.py nor provided a valid intentional no-change decision.\n"
+            "- You must either modify submission/main.py or explicitly return `REVISION_DECISION: no_change` with non-empty `RATIONALE:` and `EVIDENCE_USED:` lines.\n"
+            "- Empty response or directory listing is not sufficient.\n"
             "- Do not only write notes or audit files.\n"
         )
     extra_artifacts_block = ""
@@ -467,7 +520,7 @@ Do not use web tools.
 Do not use subagents or session tools.
 Do not run shell commands in this run.
 Do not write memory notes, analysis logs, test logs, or extra artifacts.
-Only modify the allowed file listed below.
+Only use one of the valid revision outcomes listed below.
 
 Experiment:
 - game: {game}
@@ -483,20 +536,27 @@ Task:
 {feedback_copy_line}{feedback_package_task_line}- Inspect the provided feedback package and the current codebase state.
 {extra_artifacts_block}- Do not rely on a long list of internal artifact paths.
 - For Pommerman A00, revise the bot based on the feedback.
-- Editable target:
+- Valid revision outcomes:
+  - Modify: read feedback evidence, read `submission/main.py`, then edit or rewrite `submission/main.py` with a behaviorally meaningful code change.
+  - Intentional no-change: read feedback evidence, read or inspect `submission/main.py`, do not modify files, and explain why no code change is expected to improve future outcomes.
+- Editable target for the Modify outcome:
   - Open and edit exactly: `submission/main.py`.
   - This path is relative to the per-run codebase workspace.
   - This is the only submission source file whose changes will be collected by the runner.
   - First read `submission/main.py`, then edit or rewrite it.
   - If the edit tool fails because oldText does not match, use the write tool to overwrite `submission/main.py` with a complete valid file.
-  - Do not finish until `submission/main.py` has actually changed.
   - Do not edit notes, audit files, README, scripts, tests, configs, or metadata instead.
 - The runner will write revision_log.md separately.
-- Do not create or modify any other file.
-- You must modify submission/main.py; metadata-only edits do not count.
+- Do not create or modify any other file unless choosing the Modify outcome for `submission/main.py`.
+- Metadata-only edits do not count as a valid revision.
 - notes/revision_log.md alone does not count as a valid revision.
+- Empty responses, merely listing files, and incomplete turns are not valid no-change decisions.
+- If choosing intentional no-change, your final response must include all of these non-empty lines:
+  - `REVISION_DECISION: no_change`
+  - `RATIONALE: <why keeping current code is preferable>`
+  - `EVIDENCE_USED: <feedback files or evidence considered>`
 - Keep submission runnable.
-- Make a small, concrete strategy change based on feedback.
+- If changing code, make a small, concrete strategy change based on feedback.
 - Preserve `from pommerman import agents`, `make_agent()`, and `pommerman.agents.BaseAgent` inheritance.
 - The submission will be tested on real Pommerman observations containing NumPy arrays; do not treat NumPy arrays as booleans.
 - Do not assume `obs["agent_id"]` exists; use `self.agent_id` when needed.
@@ -505,7 +565,7 @@ Task:
     if prompt_variant == "anti_draw_coached":
         variant_block = """- Treat 800-step draw outcomes as a failure signal.
 - The objective is to increase non-draw win probability, not only survival.
-- If the previous round was all draws, you must make a concrete anti-draw strategy change in submission/main.py.
+- If the previous round was all draws and a code change is expected to improve future outcomes, make a concrete anti-draw strategy change in submission/main.py.
 - Encourage safe aggression while preserving survival:
   - move toward center when safe
   - clear wood for powerups
@@ -521,10 +581,13 @@ Task:
     elif prompt_variant == "neutral":
         variant_block = """- Objective: improve expected future tournament outcome under the provided feedback package and constraints.
 - Use the feedback package, public scoreboard, match replay evidence, action logs, and run logs as evidence to understand what happened in previous matches.
-- Then update `submission/main.py` with a concrete strategy or behavior change intended to improve future tournament outcomes against opponents.
-- Prefer wins over draws, and draws over losses.
+- Prefer robust wins over draws, and draws over losses.
+- A timeout draw is a weak outcome when no submitted opponent is eliminated.
+- Early self-elimination is unfavorable.
+- A dummy/background-agent win, or a `submitted_pair_outcome` where both submitted agents lost to a dummy/background agent, is unfavorable.
+- A win caused mainly by the opponent's self-destruction is better than a draw or loss, but it is not strong evidence of a robust strategy by itself.
+- Then either update `submission/main.py` with a concrete strategy or behavior change intended to improve future decisive tournament outcomes against opponents while preserving valid actions and avoiding obvious self-destruction, or explicitly choose intentional no-change using the required structured decision lines.
 - If the previous result was already favorable, look for ways to make the behavior more robust, consistent, or resilient in future matches.
-- Treat timeout draws and cases where `submitted_pair_outcome` reports that both submitted agents lost to a dummy/background agent as unfavorable signals when better outcomes may be possible.
 - The feedback package is evidence, not a hand-authored strategy script.
 - Keep changes functional and behaviorally meaningful; do not submit only refactors, renames, comments, or metadata-only changes.
 """
@@ -618,11 +681,12 @@ Task:
 """
     elif prompt_variant == "neutral":
         variant_block = """- Objective: improve expected future tournament outcome while preserving valid actions, determinism, and survival constraints.
-- Prefer wins over draws, and draws over losses.
-- Design and implement a concrete behavior or strategy in `submission/main.py` intended to improve future performance against opponents.
-- A timeout draw is not a strong success signal if better outcomes are possible.
-- If both submitted agents lose to a dummy/background agent, treat that as an unfavorable outcome, not as a satisfactory draw.
-- Avoid obvious self-destruction and keep the submission valid.
+- Prefer robust wins over draws, and draws over losses.
+- A timeout draw is a weak outcome when no submitted opponent is eliminated.
+- Early self-elimination is unfavorable.
+- A dummy/background-agent win, or a both-submitted-lost-to-dummy outcome, is unfavorable.
+- A win caused mainly by the opponent's self-destruction is better than a draw or loss, but it is not strong evidence of a robust strategy by itself.
+- Design and implement a concrete behavior or strategy in `submission/main.py` intended to improve future decisive outcomes against opponents while preserving validity and avoiding obvious self-destruction.
 - Do not submit only refactors, renames, comments, or metadata-only changes.
 """
     else:
@@ -712,6 +776,8 @@ def _audit_openclaw_response(
     if isinstance(skills, dict):
         skills_prompt_chars = int(skills.get("promptChars", 0) or 0)
 
+    assistant_visible_text = _extract_assistant_visible_text(response)
+
     return {
         "provider": meta.get("agentMeta", {}).get("provider") if isinstance(meta.get("agentMeta"), dict) else None,
         "model": meta.get("agentMeta", {}).get("model") if isinstance(meta.get("agentMeta"), dict) else None,
@@ -724,7 +790,7 @@ def _audit_openclaw_response(
         "skillsPromptChars": skills_prompt_chars,
         "realForbiddenWorkspaceFiles": real_forbidden_workspace_files,
         "openclawDefaultMissingPlaceholders": sorted(set(default_missing_placeholders)),
-        "finalAssistantVisibleText": meta.get("finalAssistantVisibleText"),
+        "finalAssistantVisibleText": assistant_visible_text,
         "stopReason": meta.get("stopReason"),
         "executionTrace": meta.get("executionTrace"),
         "rawSystemPromptReportPresent": bool(report),
@@ -1081,6 +1147,21 @@ def main() -> None:
             audit.get("executionTrace"),
         )
         success = len(errors) == 0
+        no_change_decision = _parse_intentional_no_change(audit.get("finalAssistantVisibleText"))
+        intentional_no_change = bool(
+            args.mode == "revision"
+            and success
+            and not copy_back_changed_files
+            and not changed_files_temp
+            and no_change_decision["intentional_no_change"]
+        )
+        revision_decision = "failed"
+        if success and copy_back_changed_files:
+            revision_decision = "changed"
+        elif intentional_no_change:
+            revision_decision = "intentional_no_change"
+        elif success:
+            revision_decision = "no_effect"
 
         if success and copy_back_changed_files:
             _copy_allowed_changes_back(
@@ -1140,6 +1221,10 @@ def main() -> None:
             "openclawAudit": audit,
             "openclawDefaultMissingPlaceholders": audit.get("openclawDefaultMissingPlaceholders", []),
             "submissionContractValidation": submission_contract_validation,
+            "revisionDecision": revision_decision,
+            "intentionalNoChange": intentional_no_change,
+            "noChangeRationale": no_change_decision["no_change_rationale"] if intentional_no_change else None,
+            "noChangeEvidenceUsed": no_change_decision["no_change_evidence_used"] if intentional_no_change else None,
             "auditWarnings": audit_warnings,
             "allowedChangedFiles": sorted(ALLOWED_CHANGED_FILES),
             "changedFilesTemp": changed_files_temp,
@@ -1159,6 +1244,10 @@ def main() -> None:
             "mode": args.mode,
             "success": success,
             "changed": changed,
+            "revision_decision": revision_decision,
+            "intentional_no_change": intentional_no_change,
+            "no_change_rationale": no_change_decision["no_change_rationale"] if intentional_no_change else None,
+            "no_change_evidence_used": no_change_decision["no_change_evidence_used"] if intentional_no_change else None,
             "changed_files": copy_back_changed_files if success else [],
             "agent_id": agent_id,
             "model_id": model_id,
